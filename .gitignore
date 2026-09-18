@@ -1,0 +1,27 @@
+# mdBook 构建产物
+# （CI 里用 `mdbook build -d book`，所以构建目录就是 book/）
+/book/
+
+# ★ 证据生成产物 —— 全部集中在 .evidence/ 里，由 tools/*.sh 产出
+#   这里额外兜一层：万一有人在仓库根目录裸跑 rustc（不带 -o），
+#   产物会落在 cwd，模式 `*.s` 之类拦不住（还会拦掉源码文件）。
+#   真正的原因是：**没写 -o 时 rustc 生成的是 `lib<name>.rlib` / `<name>.rlib`**。
+*.rlib
+*.rmeta
+*.d
+*.dSYM/
+
+# Rust
+/target/
+**/*.rs.bk
+
+# macOS
+.DS_Store
+
+# 编辑器 / IDE
+.idea/
+.vscode/
+*.swp
+
+# 证据目录（可随时用 scripts/verify-all.sh 重新生成）
+.evidence/

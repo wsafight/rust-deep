@@ -1,0 +1,8 @@
+[package]
+name = "ch22-tokio"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "macros", "sync", "time"] }

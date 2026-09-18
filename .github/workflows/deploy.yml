@@ -1,0 +1,64 @@
+name: Deploy mdBook to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # 允许在 Actions 页面手动触发
+  workflow_dispatch:
+
+# GitHub Pages 部署需要的权限（缺一不可）：
+#   contents: read  —— checkout
+#   pages: write    —— 发布
+#   id-token: write —— OIDC 校验，证明这次部署确实来自本仓库
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 只允许一个并发部署；排队等前一个跑完，不中途取消
+# （部署被中途取消可能留下半个站点）
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # 固定版本 —— 与 book.toml / README 里标注的口径一致
+      MDBOOK_VERSION: v0.5.2
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 安装 mdBook
+        run: |
+          set -euo pipefail
+          url="https://github.com/rust-lang/mdBook/releases/download/${MDBOOK_VERSION}/mdbook-${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL "$url" | tar -xz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          mdbook --version
+
+      # book.toml 里已经写了 build-dir = "book"，所以直接 build 即可。
+      # （不传 -d，避免和 book.toml 的配置打架）
+      - name: 构建书
+        run: mdbook build
+
+      - name: 配置 Pages
+        uses: actions/configure-pages@v6
+
+      - name: 上传构建产物
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: book
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 发布到 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
