@@ -73,12 +73,12 @@ LLVM 能从 `i % 4` 的范围推出 `i < 4`，于是**检查被证明多余而�
 | `ch01-borrow` 的 `simple`（`Point`） | 23 行 | 2 行 |
 | `ch05-bounds` 的 `sum_all` | 见 `.evidence/` | 向量化 |
 
-⚠️ **引用行数必须写明是哪个 example**（PLAN §3.5 踩过这个坑）。
+⚠️ **引用行数必须写明是哪个 example**，避免不同证据文件的行号混淆。
 
 ## 待办
 
 - [ ] 加断言：`safe` 与 `checked_unchecked` 的**热路径指令序列相同**（逐条比对）
 - [ ] 加断言：`raw_unchecked` **不含** `cmp`/`b.hs`
 - [ ] 加断言：`provably_in_bounds` **不含**边界检查
-- [ ] 接 criterion 做真实基准（见 PLAN §13 断点 6）——
+- [ ] 接 criterion 做真实基准 ——
       **在拿到数据之前，正文不要写"更快/更慢"**

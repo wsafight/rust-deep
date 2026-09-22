@@ -20,7 +20,7 @@ scripts/verify-all.sh ch09       # 9 条断言（PASS=11）
 | 4 | `dyn` 上的 HRTB 是**一个** trait object | MIR 里 `Box<dyn for<'a> std::ops::Fn` |
 | 5 | 省略版被 LLVM 折叠成 alias | `.O3.ll` 的 `@call_elided = ... alias ... @call_boxed_parser` |
 | 6 | 显式版被折叠成**同一个** alias | `.O3.ll` 的 `@call_explicit = ... alias ... @call_boxed_parser` |
-| 7 | 把 `'a` 提到函数签名 = 量化方向反了 | `fail/too_weak.rs` → **E0597** |
+| 7 | 把 `'a` 提到函数签名后，`F` 的 bound 太弱 | `fail/too_weak.rs` → **E0597** |
 | 8 | 带生命周期参数的 trait 没有省略简写 | `fail/no_hrtb_for_visitor.rs` → **E0597** |
 | 9 | HRTB 管的是 `F`，不是方法自己的签名 | `fail/self_elision.rs` → `lifetime may not live long enough` |
 
@@ -110,7 +110,7 @@ _call_boxed_parser:
 
 **整个计算被折叠成一个常量** —— 这就是 HRTB 不引入任何运行时成本的样子。
 
-## 反例一：`fail/too_weak.rs`（量化方向反了）
+## 反例一：`fail/too_weak.rs`（生命周期 bound 的作用域不对）
 
 ```rust
 pub fn weak<'a, F: Fn(&'a str) -> &'a str>(f: F, s: &'a str) -> usize {
@@ -144,7 +144,7 @@ error[E0597]: `local` does not live long enough
 
 | | 量词 | 含义 | `local` 能用吗 |
 |---|---|---|---|
-| `fn weak<'a, F: Fn(&'a str)->&'a str>` | 存在（`'a` 在签名上） | 调用者选一个 `'a` | ❌ |
+| `fn weak<'a, F: Fn(&'a str)->&'a str>` | `'a` 作用于整次调用 | `F` 只保证支持这一个 `'a` | ❌ |
 | `fn strong<F: for<'a> Fn(&'a str)->&'a str>` | 全称（`for<'a>`） | 对**每个** `'a` 都成立 | ✅ |
 
 ## 反例二：`fail/no_hrtb_for_visitor.rs`（省略规则表达不了）

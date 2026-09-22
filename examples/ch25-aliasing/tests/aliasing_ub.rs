@@ -37,7 +37,7 @@ fn shared_ref_invalidated_by_mut_write() {
 /// 这是 `fail/write_through_shared_ref.rs`（rustc 的 `invalid_reference_casting`
 /// lint 能抓到的那个版本）的**绕开版本**：
 /// 把铸型点藏进一个函数、再用 `black_box` 挡住数据流，
-/// rustc 的 lint 就抓不到了 —— 只有 Miri 能。
+/// rustc 的局部 lint 就抓不到了；Miri 可以在这条执行路径上发现它。
 ///
 /// ★ 这正是"`unsafe` 的义务不写在代码里"的代价：
 /// **同一段逻辑，写在一个函数里会被拒，拆成两个函数就编译通过。**

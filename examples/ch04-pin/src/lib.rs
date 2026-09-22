@@ -3,7 +3,7 @@
 //! 证据生成：tools/evidence.sh ch04-pin
 //!
 //! 本章要回答：**为什么需要 `Pin`？**
-//! 因为 Rust 的移动是 **memcpy**，地址会变；
+//! 因为 Rust 的移动允许值被**重新放到另一个地址**；
 //! 而自引用结构里存着"自己的地址"—— 一移就悬垂。
 //!
 //! ★ 核心证据：`Pin<&mut T>` 与 `&mut T` 生成**完全相同**的代码（LLVM 折叠成 alias）。
@@ -19,7 +19,7 @@ pub fn plain(x: &mut u64) -> u64 { *x }
 #[unsafe(no_mangle)]
 pub fn pinned(p: Pin<&mut u64>) -> u64 { *p }
 
-/// ★ 证据 2：移动 = memcpy（MIR 里就是一条 `move`）
+/// ★ 证据 2：移动允许重定位（本样本在 MIR 里是一条 `move`）
 pub struct Big { pub a: [u64; 4] }
 
 #[unsafe(no_mangle)]

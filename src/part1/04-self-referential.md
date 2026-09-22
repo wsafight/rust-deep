@@ -1,7 +1,32 @@
 # 4. 自引用结构与 Pin 的前置知识
 
-> 一句话：Rust 的移动是 **memcpy**，而自引用结构里存着"自己的地址"——
-> 一移就悬垂。`Pin` 存在的全部理由，就是让"这个值不许移动"变成类型约束。
+> 一句话：Rust 允许把值重新放到另一个地址，而自引用结构里存着
+> "自己的地址"——一旦重定位，内部指针就可能失效。`Pin` 把
+> “从此不能再安全移动”变成了类型约束。
+
+## 先把语法认清
+
+`Pin<P>` 包装一个指针类型 `P`，限制通过该指针移动其目标值。普通类型实现
+`Unpin`，Pin 对它们几乎没有约束；包含 `PhantomPinned` 的类型可选择 `!Unpin`，
+要求初始化后保持地址稳定。`Box::pin(value)` 和 `pin!(value)` 分别提供堆上与
+当前作用域内的稳定位置。
+
+一个好记的画面是：`Pin<Box<T>>` 固定的是**货物所在的货位**，不是手里的
+提货单。提货单可以从 `p` 移给 `q`，堆上的货物不能被安全代码搬走。
+
+### 放到业务里：异步状态机与侵入式结构
+
+异步函数挂起时，状态机里的一个字段可能引用另一个字段；侵入式链表、
+注册到操作系统的 IO 请求也可能把对象地址保存到别处。如果对象随后被移动，
+这些地址就会失效。业务代码通常不手写自引用，而是通过 `Pin<Box<F>>`、
+框架提供的 pinned API 或投影库维护这个不变量。
+
+```rust
+let future = Box::pin(read_response(socket));
+runtime.spawn(future); // 移动的是 Box 句柄，不是堆上的状态机
+```
+
+这里 `Box` 提供稳定地址，`Pin` 限制安全代码移动里面的 future；两者职责不同。
 
 ## 4.0 一个会让你卡住的例子
 
@@ -9,12 +34,12 @@
 
 ```rust
 struct SelfRef {
-    data: String,
+    data: [u8; 5],
     ptr: *const u8,       // 指向 data
 }
 
 impl SelfRef {
-    fn new(data: String) -> Self {
+    fn new(data: [u8; 5]) -> Self {
         let mut s = SelfRef { data, ptr: std::ptr::null() };
         s.ptr = s.data.as_ptr();
         s
@@ -25,16 +50,17 @@ impl SelfRef {
 看起来没问题。但把它移一下：
 
 ```rust
-let a = SelfRef::new(String::from("hello"));
+let a = SelfRef::new(*b"hello");
 let b = a;                  // ← 移动
 println!("{}", unsafe { *b.ptr });   // 读出来的是什么？
 ```
 
-**`b.ptr` 仍然指向 `a.data` 原来的地址。**
-而 `a` 已经被移走了——那个地址现在可能装着别的东西。
+`data` 现在是结构体内联字段，不是另一次堆分配。`ptr` 记录的是构造时
+`s.data` 的地址；返回 `s`、再把 `a` 移给 `b` 都允许结构体换位置，裸指针
+不会自动跟着修正。不能依赖编译器碰巧做了返回值优化。
 
-这段代码**编译得过**（裸指针不做借用检查），但它是 UB。
-Miri 会当场抓到：
+一旦解引用的仍是旧地址，这段代码就是 UB。裸指针绕过了静态借用检查；
+Miri 可以在实际发生重定位并使旧位置失效的测试路径上抓到它：
 
 ```text
 error: Undefined Behavior: memory access failed: alloc291 has been freed,
@@ -46,9 +72,9 @@ error: Undefined Behavior: memory access failed: alloc291 has been freed,
 > **Rust 的所有权模型允许值被移动，而自引用要求地址永不变。
 > 这两件事直接冲突。**
 
-## 4.1 表层解释（官方书会怎么讲）
+## 4.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - `Pin<P>` 保证被指向的值不会被移动；
 - `Unpin` 表示"移动这个类型是安全的"，大部分类型都是 `Unpin`；
@@ -59,7 +85,7 @@ error: Undefined Behavior: memory access failed: alloc291 has been freed,
 
 ## 4.2 编译器眼里的样子
 
-### 4.2.1 移动就是 memcpy —— 在 MIR 里就是一条 `move`
+### 4.2.1 移动允许重定位 —— MIR 里是一条 `move`
 
 ```rust
 pub struct Big { pub a: [u64; 4] }
@@ -86,8 +112,9 @@ fn mov_it(_1: Big) -> Big {
 	ret
 ```
 
-**移动 = 把字节从旧地址搬到新地址。**
-不是"改个名字"，是真的搬。
+这个样本的机器码确实把 32 字节从源地址复制到目标地址。更一般地说，
+Rust 的 move **允许值换地址**，但编译器也可能消除实际拷贝；语言不承诺
+移动后地址保持不变。
 
 这条事实解释了自引用为什么难：如果 `Big` 里有一个指针指向**自己**，
 搬完之后，那个指针还指着旧地址。
@@ -246,19 +273,20 @@ Rust 选择了另一个方向：**不修，而是不许移**。
 
 ## 4.4 反直觉的点
 
-### 反直觉之一：`Pin` 不保证"值不会被移动"，它只保证"你不能移动它"
+### 反直觉之一：移动 Pin 句柄，不等于移动被钉住的值
 
-`Pin` 是一个**约定**，不是魔法。你可以这样绕过它：
+`Pin` 约束的是安全代码通过指针能做什么，不是给内存施法。下面这种移动
+完全合法：
 
 ```rust
 let pinned: Pin<Box<Pinned>> = Box::pin(Pinned::new(1));
-// 把 Box 里的东西换掉 —— 这是允许的！Box 的地址没变
+let moved = pinned; // 移动 Pin<Box<_>> 句柄，堆上的 Pinned 没动
 ```
 
-`Pin<Box<T>>` 保证的是"`Box` 指向的那块内存不会被释放或替换"，
-不保证"里面的字节不会被改"。**改内容是可以的**（`Pin<Box<T>>` 给 `DerefMut`
-在某些条件下…… 不，给的是 `Deref`；但 `Pin<&mut T>` 确实可以在
-`T: Unpin` 时给 `DerefMut`）。
+移动的只是拥有指针的句柄。只要被钉住的值还存活，安全代码就不能把
+`!Unpin` 的 `T` 从当前位置移走或替换掉。不过，Pin 不等于只读：对不涉及
+结构固定的不变量，仍可通过安全投影 API 修改；使用 `get_unchecked_mut` 时，
+则由调用者保证不会移动受结构固定保护的部分。
 
 准确的说法：**`Pin<P>` 保证的是 `P` 指向的值不会被移动到别处**，
 而 `P` 本身（那个 `Box` 或那个引用）可以被移动——移动 `Box` 只是搬走一个指针，
@@ -281,9 +309,10 @@ let pinned: Pin<Box<Pinned>> = Box::pin(Pinned::new(1));
 struct Pinned { data: u64, _pin: PhantomPinned }
 ```
 
-这个类型完全安全——它只是**不能被 `Pin::new` 包装**。
-如果你永远不移动它（比如它就活在栈上某个固定位置，或者放在 `Box` 里），
-它工作得好好的。
+这个类型本身完全安全，而且在**尚未被 pin、尚未建立地址相关状态之前**仍可
+正常移动。`!Unpin` 真正表达的是：一旦通过 Pin 承诺了位置稳定，就不能再
+借助安全 API 随意解除这层保护。`Box<T>` 本身也不等于 pin，只有
+`Pin<Box<T>>` 才建立这份承诺。
 
 `!Unpin` 的意思是"**移动它需要额外的证明**"，不是"这个类型有问题"。
 和第 12 章的 `!Send` / `!Sync` 是同一种语气：
@@ -303,7 +332,8 @@ rustc --edition 2024 --crate-type=lib examples/ch04-pin/fail/pin_requires_unpin.
 
 1. LLVM IR 里出现 `@plain = ... alias ... ptr @pinned`
    —— `Pin` 是零成本的；
-2. MIR 里 `mov_it` 的函数体只有 `_0 = move _1` —— 移动就是一条指令；
+2. MIR 里 `mov_it` 的函数体只有 `_0 = move _1`；当前汇编样本把值复制到
+   返回位置，说明 Rust 不承诺 move 后地址不变；
 3. `_box_pin` 的汇编里有 `bl ...___rust_alloc` —— 堆分配是真的；
 4. 反例报 E0277，且信息里有 `PhantomPinned cannot be unpinned`。
 
@@ -335,13 +365,13 @@ error: Undefined Behavior: memory access failed: alloc291 has been freed,
 ```
 
 **这一章是第 18–20 章（异步）的地基。**
-`async fn` 生成的 future 就是一个自引用状态机，
-`Pin` 就是为了让它能安全存在而设计的。
+`async fn` 生成的 future **可能**形成自引用状态机，
+`Pin` 让这类地址敏感状态可以通过安全接口被轮询。
 
 ## 4.7 小结
 
-- **移动 = memcpy**。MIR 里就是一条 `move`，汇编里就是 `ldp`/`stp`。
-  不是"改名字"，是搬字节。
+- **移动允许值被重定位**。本章样本的 MIR 是一条 `move`，汇编表现为
+  `ldp`/`stp`；优化器也可能消除实际拷贝，所以不能依赖地址保持不变。
 - **自引用结构与移动天然冲突**：存了"自己的地址"，一移就悬垂。
 - **`Pin` 是零成本的类型层约束**：`Pin<&mut T>` 与 `&mut T`
   生成同一个函数（LLVM 折叠成 alias）。
@@ -349,8 +379,8 @@ error: Undefined Behavior: memory access failed: alloc291 has been freed,
   加 `PhantomPinned`（零大小）就变成 `!Unpin`。
 - **`Pin::new` 需要 `T: Unpin`**，因为 `&mut T` 的持有者随时能移走它。
   要钉住 `!Unpin` 的值，必须先给稳定地址：`Box::pin` 或 `pin!`。
-- **`Pin` 不保证"值不会被移动"，只保证"你不能移动它"**。
-  它把约定从文档搬到了类型系统里。
+- **移动 `Pin<Box<T>>` 句柄不等于移动 `T`**。对 `!Unpin` 的 `T`，
+  安全代码不能把被钉住的值从当前位置移走；越过该边界需要 unsafe 证明。
 - **`!Unpin` 不等于危险**，只是"移动需要额外证明"——
   和第 12 章的 `!Send` / `!Sync` 是同一种语气。
 

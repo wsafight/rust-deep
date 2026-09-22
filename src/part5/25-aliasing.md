@@ -1,10 +1,39 @@
 # 25. 别名规则、`UnsafeCell` 与 `PhantomData`
 
-> 一句话：别名规则不是"两条指针不能指同一处"，而是**每块内存有一个权限栈**。
-> 规则管的是**指针的出处**，不是"有没有别名" ——
+> 一句话：别名规则不只是"两条指针能不能重叠"。在 Miri 默认采用的
+> Stacked Borrows 模型里，可以把每块内存想成带着一组访问权限。
+> 模型关心**指针的出处和访问历史**，不只看地址是否相同 ——
 > 所以**同一个逻辑，写在不同的位置，一个是 sound 的，一个是 UB**。
 
-第 24 章讲清了 `unsafe` 的义务是"维持 LLVM 元数据的前提"。
+## 先把语法认清
+
+`UnsafeCell<T>` 是共享引用下合法修改数据的基础；`UnsafeCell::get()` 返回
+裸指针，调用者仍需保证没有数据竞争和无效引用。`PhantomData<U>` 不占空间，
+用于告诉类型系统外层类型在逻辑上拥有或借用了 `U`，从而影响生命周期、
+drop check、variance 和 auto trait。
+
+这两样东西常被放在一起讲，却干着不同的活：`UnsafeCell` 改变“能不能通过
+共享引用写”，`PhantomData` 补充“这个外层类型在逻辑上和谁有关系”。
+
+### 放到业务里：自定义容器、缓存与 FFI 句柄
+
+实现 arena、对象池或 FFI handle 时，结构体可能只保存裸指针，却在语义上
+借用某块内存；这时需要正确的 `PhantomData`。实现锁、Cell 或缓存内部更新时，
+则必须通过 `UnsafeCell` 表达内部可变性。两者职责不同：前者补静态类型关系，
+后者改变共享引用下的可变性规则。
+
+```rust
+struct Handle<'a> {
+    ptr: *mut Record,
+    _borrow: PhantomData<&'a mut Record>,
+}
+```
+
+这个 ZST 字段不会修复 `ptr`，却会让 `Handle` 的生命周期和 variance 更接近
+“持有一份可变借用”的真实语义；裸指针有效性仍由构造器与使用者负责。
+
+第 24 章讲清了 `unsafe` 的义务是维护安全抽象依赖的不变量，
+LLVM 元数据只是其中可观察的一层。
 本章要看的是最难维持的那一条：**别名**。
 
 而且本章有一个特殊的地位：**它的主证据不是编译器输出，是 Miri。**
@@ -76,9 +105,9 @@ error: Undefined Behavior: trying to retag from <N> for SharedReadOnly permissio
 本章要回答的就是这三个问题。而它们的答案指向同一个东西：
 **别名规则管的是权限的出处，不是"谁和谁重叠"。**
 
-## 25.1 表层解释（官方书会怎么讲）
+## 25.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - Rust 的别名规则是"同一时刻要么一个 `&mut`，要么任意多个 `&`"；
 - `UnsafeCell` 是内部可变性的基础，`Cell` / `RefCell` / `Mutex` 都建在它上面；
@@ -138,16 +167,16 @@ stable 上 `no_retag` 只有两个来源：`EraseDerefTemps`
 
 | 层 | 工具 | 承担什么 |
 |---|---|---|
-| **主** | **Miri** | Stacked Borrows 的**真实执行语义**：什么合法、什么是 UB |
+| **主** | **Miri** | 按当前 Stacked Borrows 模型动态检查具体执行路径 |
 | 辅 | LLVM IR | 契约（`noalias` / `captures`）—— 见第 24 章 |
 | 澄清 | MIR | 只用来**破除误解**：`no_retag` 不是 retag |
 
 MIR 在本章只能承担"展示 `no_retag` 长什么样、纠正误解"的角色。
 **撑不起"别名规则"的主证据。**
 
-### 25.2.2 正确的模型：权限栈（Stacked Borrows）
+### 25.2.2 一个实用但仍在演进的模型：Stacked Borrows
 
-别名规则的正确模型**不是**"两条指针不能重叠"，而是：
+本章采用的 Stacked Borrows 模型不只问“两条指针是否重叠”，而是：
 
 > **每块内存有一个权限栈。指针的"出处"决定了它带什么权限。
 > 每次访问都会调整这个栈 —— 用它，就把它**之上**的权限弹掉。**
@@ -222,25 +251,30 @@ let r: &u64 = unsafe { &*c.get() };      // ② 后建 &T
 assert_eq!(*r, 2);                        // ✅
 ```
 
-### 25.2.5 `PhantomData`：让裸指针"携带"它该有的权限
+### 25.2.5 `PhantomData`：补回类型系统看不见的关系
 
-裸指针本身**不携带任何权限信息**。要让它携带，得靠 `PhantomData`：
+裸指针在 Rust 的**类型检查**层面不表达"这个结构体借用了谁、拥有谁"。
+但在 Miri 的动态别名模型里，裸指针仍有 provenance/tag，它来自指针的
+实际创建路径，**不是**由 `PhantomData` 赋予的。
+
+`PhantomData` 的职责，是把所有权或借用关系补回静态类型系统：
 
 ```rust
 pub struct SharedReadOnly<'a, T> {
     ptr: *const T,
-    _p: PhantomData<&'a T>,                  // ← 语义上是 &'a T（只读）
+    _p: PhantomData<&'a T>,                  // ← 类型层面借用了 &'a T
 }
 
 pub struct SharedReadWrite<'a, T> {
     ptr: *mut T,
-    _p: PhantomData<&'a UnsafeCell<T>>,      // ← 语义上是 &'a UnsafeCell<T>（可写）
+    _p: PhantomData<&'a UnsafeCell<T>>,      // ← 类型层面借用了 UnsafeCell<T>
 }
 ```
 
 **两个结构体的字段布局完全一样**（8 字节指针 + ZST）。
-区别只在 `PhantomData` 的**类型参数** —— 但 Miri 对它们的判定不同：
-`SharedReadOnly` 派生的指针会被写入作废，`SharedReadWrite` 的不会。
+二者访问权限不同，是因为构造器里的真实指针分别来自 `&T` 和
+`UnsafeCell::get()`；即使删掉 `PhantomData`，Miri 也不会因此改变那个指针
+已经具有的 provenance。`PhantomData` 改变的是编译期关系，而不是运行时 tag。
 
 `PhantomData` 是零大小的，但它让类型**参与**三件事：
 
@@ -248,11 +282,13 @@ pub struct SharedReadWrite<'a, T> {
 2. **auto trait 推导** —— 第 12 章：`PhantomData<*const T>` 让类型 `!Send`；
 3. **variance** —— 第 3 章：`PhantomData<&'a T>` 是协变的。
 
-★ 本章用的是第 1 条和第 3 条：**把"这个裸指针的权限"写进类型里**，
-让编译器（和 Miri）知道该按哪套规则检查。
+★ 本章用的是第 1 条和第 3 条：**让拥有裸指针的外层类型表现得像它
+借用了 `&'a T` 或 `&'a UnsafeCell<T>`**。Miri 判断一次访问是否合法时，
+看的仍是实际被解引用指针的来源和访问历史。
 
 **这就是 `PhantomData` 在 `unsafe` 代码里的真正用途** ——
-不是"占位符"，是**把裸指针丢失的信息补回来**。
+不是给指针制造权限，而是把类型系统无法从裸指针字段推导出的
+生命周期、所有权、variance 和 auto trait 关系显式写出来。
 
 ### 25.2.6 rustc 的 lint 兜得住什么、兜不住什么
 
@@ -282,7 +318,7 @@ let v = 21u64;
 let (a, b) = unsafe { (&*p, &*p) };   // 两个共享引用指向同一处 —— 完全合法
 ```
 
-第 24 章已经证明：LLVM 的 `noalias` **允许**这件事
+第 24 章已经说明：LLVM 的 `noalias` **允许**这件事
 （LangRef："only holds for memory locations that are **modified**"）。
 
 所以规则必须更精细：
@@ -311,26 +347,28 @@ let (a, b) = unsafe { (&*p, &*p) };   // 两个共享引用指向同一处 —�
 
 ### 为什么 `PhantomData` 不是"占位符"
 
-因为裸指针在类型系统里**丢掉了三样东西**：生命周期、auto trait、variance。
+因为仅凭裸指针字段，类型系统无法推导 API 想表达的借用/所有权关系，
+特别是生命周期、variance、drop check 与 auto trait 行为。
 
 ```rust
 pub struct Handle { ptr: *mut u64 }                    // 丢了全部三样
 pub struct Handle<'a> { ptr: *mut u64, _p: PhantomData<&'a u64> }   // 补回来了
 ```
 
-**`PhantomData` 就是"把裸指针丢掉的信息补回来"的工具。**
-一个裸指针字段配一个正确的 `PhantomData`，等价于"手写的引用"。
+**`PhantomData` 就是把这些静态关系补回来的工具。**
+它可以让外层类型在 variance、drop check 和 auto trait 推导上表现得像
+拥有或借用了某个 `T`，但不等价于真实引用，也不改变裸指针的 provenance。
 
-这也是为什么 `unsafe` 代码里的 `PhantomData` 几乎总是**必须**的，
-而不是可选的 —— 少了它，类型系统对你的结构体一无所知。
+所以当一个含裸指针的类型在逻辑上拥有或借用了某个值、而字段本身无法
+表达这种关系时，`PhantomData` 往往是必须的；若没有这种语义关系，
+则不能机械地认为每个裸指针字段都必须搭配它。
 
 ## 25.4 反直觉的点
 
 ### 反直觉之一：`no_retag` 是"不做 retag"的标记，不是 retag 的证据
 
-25.2.1 已经展开。这是本书**修正过一次**的结论（见 PLAN §11.1）——
-初版把 `no_retag` 当成"retag 在借用检查阶段被折叠"的证据，
-**归因是错的**。
+25.2.1 已经展开。要特别避免把 `no_retag` 当成
+"retag 在借用检查阶段被折叠"的证据；这种归因是错的。
 
 正确的说法：
 
@@ -398,7 +436,7 @@ error: assigning to `&T` is undefined behavior, consider using an `UnsafeCell`
 另有一个竞争模型 **Tree Borrows**（`-Zmiri-tree-borrows` 可切换）。
 
 ★ 实践含义：
-- Miri 报 UB → **几乎肯定有问题**，值得认真查；
+- Miri 报 UB → 说明代码违反当前所选模型，应结合语言规则与 API 契约认真核查；
 - Miri 不报 → **不能反推"代码一定 sound"**（模型可能更严或更松）；
 - **不要**把"Miri 通过"当成 soundness 证明写在文档里。
 
@@ -457,20 +495,21 @@ rustc --edition 2024 --crate-type=lib examples/ch25-aliasing/fail/write_through_
 `&T` 建立之后发生的写入会作废它。所以：
 
 - **先写完，再建引用**；
-- 如果一个结构体既要共享读又要共享写，
-  它的裸指针字段应该带 `PhantomData<&'a UnsafeCell<T>>`，
-  **而不是** `PhantomData<&'a T>`。
+- 如果一个结构体在逻辑上借用 `UnsafeCell<T>`，用恰当的
+  `PhantomData<&'a UnsafeCell<T>>` 表达这层静态借用关系；
+  这不能代替对真实裸指针来源和访问顺序的检查。
 
-### 规则三：`PhantomData` 不是可选的
+### 规则三：按真实语义选择 `PhantomData`
 
-裸指针字段丢掉了生命周期、auto trait、variance。
-`PhantomData` 是**唯一的补法**，而且补错了 Miri 会报出来。
+裸指针字段本身表达不了外层类型的借用/所有权语义。需要表达这些关系时，
+用 `PhantomData` 影响生命周期、drop check、auto trait 与 variance；
+补错通常表现为静态类型属性错误，不能指望 Miri 自动诊断。
 
 ```rust
-// ❌ 丢了信息：既不是 Send/Sync 的正确推导，也没有权限信息
+// 若 Handle 在逻辑上借用 T，这里缺少生命周期关系
 struct Handle { p: *mut T }
 
-// ✅ 补回来
+// 表达：Handle 在 'a 内共享借用了一个 UnsafeCell<T>
 struct Handle<'a, T> { p: *mut T, _m: PhantomData<&'a UnsafeCell<T>> }
 ```
 
@@ -489,16 +528,16 @@ struct Handle<'a, T> { p: *mut T, _m: PhantomData<&'a UnsafeCell<T>> }
 
 ## 25.7 小结
 
-- **别名规则的正确模型是"权限栈"，不是"指针不能重叠"**。
-  规则管的是**指针的出处**，所以同一个逻辑写在不同的位置，
+- **Stacked Borrows 提供了一个实用的“权限栈”模型**，比
+  “指针不能重叠”更精细。它关心指针出处和访问历史，所以同一个逻辑写在不同位置，
   可能一个是 sound 的、一个是 UB。
 - **`UnsafeCell` 是唯一合法的"通过共享引用修改"**：
   它把"只读"从 `&UnsafeCell<T>` 上摘掉。所有内部可变性类型都建在它上面。
 - **顺序决定一切**：`UnsafeCell` 让那次写入合法，
   但**不会救活一个在此之前建立的 `&T`**。先写完，再建引用。
-- **`PhantomData` 是把裸指针丢失的信息补回来的工具**
-  （生命周期 / auto trait / variance）——
-  在 `unsafe` 代码里它几乎总是**必须**的，不是可选的。
+- **`PhantomData` 补的是静态类型关系**
+  （生命周期 / drop check / auto trait / variance），不制造 Miri 权限，
+  也不改变裸指针的 provenance。是否需要它取决于类型要表达的所有权和借用关系。
 - **★ 本章的证据来自 Miri，不是 MIR**：
   retag 在 1.98 里是 **codegen 阶段**的事，任何 MIR 打印都看不到。
   `--emit=mir` 里的 `no_retag` 恰恰是"这里**不**做 retag"的标记。

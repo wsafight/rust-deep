@@ -9,7 +9,7 @@ tools/evidence.sh ch16-atomics
 scripts/verify-all.sh ch16
 ```
 
-## ★ 核心证据：每个 `Ordering` 生成**不同**的指令
+## ★ 核心证据：本章选取的 `Ordering` 在 AArch64 上体现为不同指令
 
 | Rust 写法 | AArch64 指令 | 含义 |
 |---|---|---|
@@ -22,8 +22,9 @@ scripts/verify-all.sh ch16
 | `fetch_add(SeqCst)` | `ldaddal` | 原子性 + acquire-release |
 | `compare_exchange(SeqCst)` | `casal` + `cmp`/`cset` | 用旧值判断成功与否 |
 
-**讲法**：内存序**不是抽象概念**，它直接决定生成哪条指令。
-AArch64 有独立的内存序指令，所以差异是**肉眼可见**的。
+**讲法**：内存序最终需要由目标架构的指令或等价序列兑现。
+这组 AArch64 样本中的差异肉眼可见，但不能据此假定每个 Ordering、
+每个操作或每个 CPU feature 组合都恰好一一对应到不同指令。
 
 ### 逐条原始输出（`.evidence/ch16-atomics-lib.O3.s`）
 
@@ -90,23 +91,26 @@ tools/evidence.sh ch16-atomics x86_64-apple-darwin
 **(A) x86 上 `Relaxed` 的 RMW 和 `SeqCst` 的 RMW 生成完全相同的代码。**
 `fetch_add_relaxed` 和 `fetch_add_seqcst` 都是 `lock xaddq` ——
 因为 x86 的 `lock` 前缀本身就提供全序，没有"更弱的原子 RMW"。
-**在 x86 上对 RMW 放松内存序，性能上一分钱都省不下来。**
+在这份 x86_64 产物中两者机器码相同；实际性能还受上下文和硬件影响，
+因此这里只断言代码生成相同。
 
-**(B) x86 上 load/store 放松内存序也省不下来。**
+**(B) x86 上本章的 load 和 Relaxed/Release store 对照机器码相同。**
 三个 load 全是 `movq`（含 `Acquire` 和 `SeqCst`），
 两个 store 全是 `movq`（含 `Release`）。
-**"放松内存序"的收益是架构相关的 —— AArch64 上才有明显差异。**
+这里没有测试 SeqCst store；不能把该结论外推到所有 store。
+本章能证明的是：Ordering 的代码生成差异依赖架构和具体操作。
 
 ### 这张表说明了两件事
 
 **(1) x86 的强内存模型让大部分 Ordering 消失。**
 三个 load 全是 `movq`，两个 store 全是 `movq` ——
 因为 x86 的普通 load 天然有 acquire 语义、普通 store 天然有 release 语义。
-**"内存序"不是抽象概念，它是"这个架构需不需要额外指令"的问题。**
+内存序最终要由编译器约束和目标架构指令共同兑现，不能只按一张指令表推理。
 
-**(2) RMW（读-改-写）在任何架构上都必须显式同步。**
+**(2) RMW 必须由原子机器操作或等价的原子指令序列实现。**
 `fetch_add` / `compare_exchange` 在 x86 上都需要 `lock` 前缀
-（`lock xaddq` / `lock cmpxchgq`），在 AArch64 上需要 `ldaddal` / `casal`。
+（`lock xaddq` / `lock cmpxchgq`）；在这份 AArch64 产物中，Relaxed RMW
+是 `ldadd`，SeqCst RMW 是 `ldaddal` / `casal`。
 **这是两个架构唯一"看起来一致"的地方。**
 
 ★ 但**失败路径的指令数不同**：AArch64 的 `casal` 之后要
@@ -115,7 +119,7 @@ x86 的 `cmpxchgq` **直接**设置零标志位，一条 `sete` 就够。
 **同一个语义，两个架构的指令数不同。**
 
 → **写作建议**：这一节用**并排的两栏代码**，比任何文字都清楚。
-这是全书唯一一处"同一份 Rust 代码、两种 ISA、肉眼可见的差异"。
+这是观察“同一份 Rust 代码如何映射到不同 ISA”的代表性案例。
 
 ## ★ 与第 13 章的交叉印证
 

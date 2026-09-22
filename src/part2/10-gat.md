@@ -4,6 +4,38 @@
 > `type Item<'a>` 是 `Self` 的函数 `'a -> Type`。
 > 它解决的正是 `Iterator` 解决不了的那个问题：**`next` 返回的东西不能借用 `self`。**
 
+## 先把语法认清
+
+GAT 把关联类型写成带参数的类型族：
+
+```rust
+trait LendingIter {
+    type Item<'a> where Self: 'a;
+    fn next<'a>(&'a mut self) -> Option<Self::Item<'a>>;
+}
+```
+
+这表示每个借用长度 `'a` 都对应一个输出类型，输出可以直接借自 `self`。
+
+普通关联类型像一个固定答案，GAT 更像一台**类型售货机**：投入不同的 `'a`，
+吐出与这次借用匹配的 `Item<'a>`。机器仍由实现者唯一确定。
+
+### 放到业务里：数据库游标与零拷贝消息读取
+
+游标每次 `next()` 返回的行视图可能借用驱动内部缓冲区；网络协议解析器也可能
+返回借自接收缓冲区的字段。GAT 能把“结果只活到下一次可变借用之前”写进 API，
+减少复制和分配，同时阻止调用者长期保存已经被下一次读取覆盖的数据。
+
+```rust
+trait Cursor {
+    type Row<'a> where Self: 'a;
+    fn next<'a>(&'a mut self) -> Option<Self::Row<'a>>;
+}
+```
+
+拿着 `Row<'_>` 时再次调用 `next()` 会与前一次可变借用冲突，正好阻止驱动
+覆盖仍在使用的内部缓冲区。
+
 ## 10.0 一个会让你卡住的例子
 
 你想写一个"按窗口滑动"的迭代器，数据是它**自己拥有**的：
@@ -70,9 +102,9 @@ help: consider using the lifetime from the impl block
 **"让 `Item` 的生命周期随每次 `next` 调用变化"——普通关联类型表达不了这件事。**
 这一章讲 GAT 怎么表达。
 
-## 10.1 表层解释（官方书会怎么讲）
+## 10.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - **GAT**（generic associated type）就是"带参数（生命周期或类型）的关联类型"：
   `type Item<'a>;`；
@@ -255,7 +287,7 @@ _sum_windows_manual:
 **GAT 不引入任何额外开销。** 61 vs 62 行、都是 11 条 SIMD 加法。
 
 > ⚠️ 这里只说"指令数几乎相同"，**不说"哪个更快"** ——
-> 本书在没有 benchmark 数据之前不写性能断言（见 PLAN §13 断点 6）。
+> 本书在没有 benchmark 数据之前不写"哪个更快"；这里仅比较生成代码。
 
 ## 10.3 为什么必须这样设计
 
@@ -284,7 +316,7 @@ _sum_windows_manual:
 说明这是一个**保守的强制**——未来可能放宽（issue #87479），
 但当前版本必须写。
 
-### 为什么 GAT 和 `dyn` 不能共存
+### 为什么本章这种 GAT trait 不能直接变成 `dyn`
 
 第 7 章讲过：**vtable 是一张定长的表**。
 `type Item<'a>` 的参数 `'a` 可以有无穷多个取值，
@@ -305,20 +337,19 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
    = help: consider moving `Item` to another trait
 ```
 
-**和第 7 章的 E0038 是同一个理由**（"不能建 vtable"），
-只是这次挡路的是 GAT 而不是泛型方法。
+这仍属于第 7 章的 dyn compatibility 检查：当前规则不能为这个暴露 GAT 的
+接口构造可用的 trait object。这里的关键不是字面上的“给每个 `'a` 放一个
+槽位”，而是调用方无法在现有 trait object 类型中完成所需的关联类型绑定。
 
-> 所以"用 GAT 表达 lending iterator"和"用 `dyn` 做动态分发"**不能同时要**。
-> 这是 GAT 最主要的实际限制——也是为什么 `Iterator` 至今没改成 lending 的。
+> 所以按当前 dyn compatibility 规则，本章这个 lending trait 不能直接做成
+> trait object。这是设计 API 时必须提前考虑的限制。
 
-### 为什么 `Iterator` 不用 GAT
+### 为什么不能轻率地把 `Iterator` 改成 lending 版本
 
-因为 `Iterator` 是**最需要 `dyn` 的 trait 之一**
-（`Box<dyn Iterator<Item = u8>>` 到处都是）。
-改成 lending 之后，`dyn Iterator` 立刻不可用。
-
-标准库的取舍是：**保留 `dyn`，把 lending 场景交给第三方 trait**
-（`lending-iterator`、`async` 的 `Stream` 等）。
+现有 `Iterator` 已有庞大生态，也支持 `Box<dyn Iterator<Item = u8>>` 这类
+trait object。直接把它改成 lending 形态既会破坏兼容性，也会撞上当前 GAT
+trait 的 dyn compatibility 限制。因此 lending iterator 通常作为新的抽象出现，
+而不是原地替换 `Iterator`。这不是唯一原因，但已经足以说明二者不能随意互换。
 
 ## 10.4 反直觉的点
 
@@ -340,7 +371,7 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
 
 这个问题没有答案，所以只能把这种情况排除掉。
 
-### 反直觉之三：GAT 和 `dyn` 是**互斥**的，而 `dyn` 常常更重要
+### 反直觉之三：本章这种 GAT 会挡住 `dyn`
 
 这是 GAT 最容易被低估的代价。看 `Iterator` 的例子：
 
@@ -431,8 +462,8 @@ pub trait SelfRef {
   漏掉会报 `missing required bound on Item`，且编译器会直接给修复建议。
 - **GAT 的参数不限于生命周期**：`type Member<T>` 表达"一族类型"，
   **一个 impl 覆盖所有 `T`**（trait 泛型参数做不到这一点）。
-- **GAT 和 `dyn` 互斥**（E0038）：vtable 是定长的，而 `'a` 有无穷多个取值。
-  这是 GAT 最主要的实际限制，也是 `Iterator` 至今不用 GAT 的原因。
+- **本章这种带 GAT 的 trait 不能直接做成 `dyn`**（E0038）；
+  这是 API 设计的重要限制，但不要把它简化成“每个生命周期一个 vtable 槽”。
 - **GAT 零成本**：MIR 里 GAT 参数完全消失，
   汇编与手写循环几乎逐行相同（61 vs 62 行，11 条 `add.2d`）。
 - **GAT 是消灭 `unsafe` 的工具**：它把"借出的视图不会与下一次借用重叠"

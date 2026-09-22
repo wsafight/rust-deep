@@ -1,14 +1,43 @@
 # 21. `async fn in trait` 的现状
 
 > 一句话：**`async fn` 在 trait 里隐藏了返回类型** ——
-> 这既是它能用起来的原因，也是它**不能表达 `Send`、不能 `dyn`** 的原因。
-> 三个需求（`dyn` / `Send` / 零分配）在 1.98 上**最多同时满足两个**。
+> 这既是它能用起来的原因，也是公共 API 难以补充返回 future 的 `Send` bound、
+> 且当前不能直接 `dyn` 的原因。
+> 对本章比较的几种常见接口，在 Rust 1.98 上，`dyn`、`Send`、零分配三项
+> 往往需要取舍。
+
+## 先把语法认清
+
+trait 中可以直接声明 `async fn get(&self) -> Value`。泛型调用时，编译器为
+具体实现生成对应 future；但公共 API 隐藏了返回 future 的附加 bound，且该
+方法目前不能直接用于 trait object。需要显式 `Send` 时可写 RPITIT，
+需要动态分发时通常返回 `Pin<Box<dyn Future<...>>>`。
+
+这里的麻烦可以浓缩成一句话：**方法名能进入 vtable，但当前 trait object
+规则无法直接表达每个实现各自的匿名 future 返回类型。**泛型、`Send`、`dyn`
+三个需求因此开始互相拉扯。
+
+### 放到业务里：可替换的存储后端
+
+服务层常希望同一接口支持内存、数据库和远程 RPC 后端。部署时实现固定、
+追求零分配，可用泛型 + AFIT；插件在运行时选择，需要 `dyn`，则要接受装箱
+future 或使用辅助宏。若任务交给多线程 executor，返回 future 还必须是 `Send`。
+这三个约束应在 API 设计阶段一起决定。
+
+```rust
+trait Store {
+    fn get(&self, key: Key) -> impl Future<Output = Value> + Send;
+}
+```
+
+这条签名把多线程运行需要的 `Send` 写进公共承诺；若还需要 `dyn Store`，
+则应改用对象安全的装箱 future 接口或在边界处做类型擦除。
 
 第 18–20 章把 `async` 从里到外拆了一遍：状态机、`Pin`、生命周期、`Send` 传染。
 这一章换一个方向 —— **当 `async fn` 出现在 trait 里**，
 前面那些机制会撞上什么。
 
-★ **本章的结论演进最快**，请以本章顶部的"最后验证"标注为准。
+★ **本章的结论演进最快**，请以附录 A 和本章 evidence 的验证版本为准。
 
 ## 21.0 一个会让你卡住的例子
 
@@ -57,9 +86,9 @@ error[E0038]: the trait `Store` is not dyn compatible
 **为什么？** 这两条错误指向同一个根源，而那条 lint 已经把答案说出来了：
 **"auto trait bounds cannot be specified"**。
 
-## 21.1 表层解释（官方书会怎么讲）
+## 21.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - `async fn in trait` 在 Rust 1.75 稳定（**AFIT**）；
 - 它等价于返回 `impl Future` 的方法（**RPITIT**）；
@@ -151,8 +180,9 @@ error[E0277]: `dyn Future<Output = u64>` cannot be unpinned
 ```
 
 **这是第 19 章的知识在新地方冒出来**：
-`.await` 的 blanket impl 要求 `F: Future + Unpin`，
-而 **trait object 默认 `!Unpin`**（vtable 里没有 `Unpin` 的信息）。
+`Box<F>` 只有在 `F: Future + Unpin` 时才实现 `Future`；而这里擦除后的
+`dyn Future` 没有 `Unpin` bound，所以普通 `Box<dyn Future>` 不能直接被 poll。
+`.await` 本身并不普遍要求 future 为 `Unpin`，`Pin<Box<dyn Future>>` 就可以 await。
 
 修法是 `Box::into_pin`：
 
@@ -269,7 +299,7 @@ cannot be specified
 **因为 trait 的承诺是抽象的**：`spawn_it<S: Store>` 要对**所有** `S` 成立，
 而 `Store` 没有承诺 `Send`。某个实现完全可以捕获 `Rc`（21.4 反直觉之二）。
 
-★ 这不是"保守"，是**唯一正确的做法**。
+这不是编译器故意保守，而是泛型函数必须遵守 trait 已公开的承诺。
 要放行，必须让 **trait 自己承诺** `Send` —— 那就是 RPITIT 的写法。
 
 ### 反直觉之二：RPITIT 的 `+ Send` 让报错位置**变好了**
@@ -317,31 +347,32 @@ _use_store_mem:
 ★ 所以"异步 trait 有开销"这个印象是错的 ——
 **开销取决于你选哪条路**，而不是"用了 trait"。
 
-### 反直觉之四：`dyn` 和 AFIT 的冲突是**根本性的**
+### 反直觉之四：当前 AFIT 不能直接进入 trait object
 
-不是"还没实现"，是"按现在的 vtable 模型无法实现"。
+在 Rust 1.98 的 dyn compatibility 规则下，含 AFIT 的 trait 会被拒绝。
 
 vtable 是一张**固定布局**的函数指针表（第 7 章：
 前 3 个 slot 是 `drop` / `size` / `align`，方法从偏移 24 起）。
 `async fn` 的返回类型**每个实现都不同** —— 表就定不下大小。
 
-★ 要支持，得改 vtable 的模型本身（比如加一层间接）。
-所以这条路**比 `Send` 那条长得多** ——
-**`Send` 已经有 RPITIT 解法了，`dyn` 还没有。**
+常见兼容方案是在 API 层显式返回 `Pin<Box<dyn Future<...>>>`，把具体 future
+擦除并间接存放。语言和编译器未来也可能提供其他方案，因此这里应记住的是
+Rust 1.98 的限制与当前工程取舍，而不是把它当作永远无法改变的定律。
 
 ### 反直觉之五：`Box<dyn Future>` 不能直接 `.await`
 
 这个错误让人意外 —— 明明 `.await` 就是给 `Future` 用的。
 
-**因为 `.await` 的 blanket impl 要求 `F: Future + Unpin`**（第 19 章），
-而 trait object 默认 `!Unpin`。
+因为 `Box<F>` 只有在 `F: Future + Unpin` 时才实现 `Future`；这里的
+`dyn Future` 没有 `Unpin` bound。`.await` 本身并不普遍要求 `Unpin`。
 
 ★ 又一次印证第 19 章那句话：
 **`Pin` 不是一个"高级话题"，它会在你最意想不到的地方出现** ——
 比如这里，在"想给异步 trait 加动态分发"这个看起来跟 `Pin` 无关的需求上。
 
-修法只有两条：`Box::into_pin`（把 `Box` 变成 `Pin<Box>`），
-或者 `Box::pin`。
+通常应让接口直接返回 `Pin<Box<dyn Future<...>>>`；已有 `Box<dyn Future>`
+也可用 `Box::into_pin` 转换。若被擦除的 future 本身确实是 `Unpin`，
+还可以把 `+ Unpin` 写进 trait object bound。
 
 ## 21.5 亲手验证
 
@@ -412,7 +443,8 @@ done
   `_use_store_mem` 只有 `strb` + `ret`，MIR 里字段是
   `{async fn body of use_store<Mem>()}`。**"异步 trait 有开销"是错的。**
 - **要 `dyn` 必须回到 `Box<dyn Future>`**，代价是每次调用一次堆分配；
-  而且它**不能直接 `.await`**（`!Unpin`）—— 要用 `Box::into_pin`。
+  普通 `Box<dyn Future>` 不能直接 `.await`；通常应让接口直接返回
+  `Pin<Box<dyn Future>>`，或用 `Box::into_pin` 转换已有 Box。
 - **要 `Send` 就用 RPITIT 手写 `+ Send`**：
   代价是不能简写 `async fn`，**收益是 `Send` 的检查点前移到实现处**。
 - **没有一列全是 ✅ 的方案**：`dyn` / `Send` / 零分配，**最多同时满足两个**。

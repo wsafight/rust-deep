@@ -17,13 +17,13 @@
 # 构建书
 mdbook serve --open
 
-# 一键验证全书证据（编译 + 生成证据 + 断言，268 条）
+# 一键验证全书证据（编译 + 生成证据 + 断言）
 scripts/verify-all.sh
 
 # 只验证某一章（编译、证据、断言都受此过滤）
 scripts/verify-all.sh ch07
 
-# Miri 验证（8 条，需要 nightly；与上面分开，见 PLAN §13 断点 3）
+# Miri 验证（8 组检查，需要 nightly；与 stable 验证分开）
 scripts/verify-miri.sh
 ```
 
@@ -35,12 +35,12 @@ scripts/verify-miri.sh
 | `examples/` | 每章一个独立 crate，承载书中所有可运行示例 |
 | `examples/*/src/lib.rs` | 该章的正例（可编译） |
 | `examples/*/fail/*.rs` | 该章的**反例**（故意编译不过，不参与构建） |
-| `examples/*/tests/*.rs` | Miri 用例（UB 用例用 `#![cfg(miri)]` 包住） |
+| `examples/*/tests/*.rs` | 集成测试与 Miri 用例（UB 用例用 `#![cfg(miri)]` 包住） |
 | `examples/*/cross-targets` | 该 example 需要哪些额外 target 的对照证据 |
 | `examples/*/evidence.md` | 该章的实测记录（命令 + 真实输出 + 断言清单） |
 | `tools/` | 生成 MIR / LLVM IR / 汇编 / 反汇编的脚本 |
 | `.evidence/` | 证据产物（gitignore，随时可重新生成） |
-| `PLAN.md` | 写作方案与实测笔记（临时，定稿后删除） |
+| `PLAN.md` | 写作阶段的设计与实测笔记，不属于正式书稿 |
 
 ## 证据工具
 
@@ -63,12 +63,13 @@ tools/evidence.sh ch16-atomics x86_64-apple-darwin
 - **本机工具链：`rustc 1.98.1` / `cargo 1.98.1` / LLVM 22.1.8**
   → `.evidence/` 全部产物与各章"最后验证"标注均为 **1.98.1**。
 - 主验证目标：`aarch64-apple-darwin`
-- 对照目标：`x86_64-apple-darwin`（已装；**只能看代码，不能运行**）
-- Miri：`cargo +nightly miri test`（`rustc 1.100.0-nightly` / `miri 0.1.0`）
+- 对照目标：`x86_64-apple-darwin`（可选；**只生成代码，不运行**）
+- Miri：可选 nightly 工具；安装方式见附录 A
 
 ## 当前状态
 
-- 断言：**268 条全绿**（`scripts/verify-all.sh`）+ **8 条全绿**（`scripts/verify-miri.sh`）
+- `scripts/verify-all.sh` 会验证本机可用的目标；未安装的可选跨架构目标会明确
+  标为 `SKIP`。`scripts/verify-miri.sh` 单独验证 Miri 正例和预期 UB 反例。
 - 已固化证据的 example（含断言）：
 
   | example | 内容 | 章 |

@@ -8,7 +8,7 @@
 //!
 //! 1. `async fn` 的状态机**可能是自引用的** ——
 //!    一个跨 `await` 的局部变量可能借用另一个跨 `await` 的局部变量；
-//! 2. 而 Rust 的**移动是 memcpy**（第 4 章），地址会变；
+//! 2. 而 Rust 的移动**允许重定位**（第 4 章），地址可能改变；
 //! 3. 自引用结构一移动，内部的引用就**悬垂**；
 //! 4. 所以必须有一种方式表达"**这个值一旦定下来就不能再移动**"；
 //! 5. `Pin<P>` 就是这个表达 —— 而且它**零成本**（纯类型层）。
@@ -45,10 +45,11 @@ pub struct SelfRef {
 }
 
 impl SelfRef {
-    /// 构造：在**当前地址**上记下 `data` 的位置。
+    /// 在堆上构造并钉住，然后才建立自引用。
     ///
-    /// ★ 注意签名里的 `Pin<&mut Self>` —— 这个函数要求调用者
-    /// 已经保证了"这个值不会再移动"。
+    /// ★ 构造顺序不能反：先取得稳定地址，再把该地址写进 `self_ref`。
+    /// 因此这个安全构造函数直接返回 `Pin<Box<Self>>`，不允许把一个
+    /// 指向旧对象的裸指针装进另一个按值返回的新对象。
     ///
     /// ★ 为什么用 `addr_of_mut!(this.data)` 而不是 `&this.data as *const u64`？
     ///
@@ -58,31 +59,33 @@ impl SelfRef {
     /// `addr_of_mut!` 派生的是 **Unique** 权限，写入不会作废它。
     ///
     /// ⚠️ 这条差异**在汇编里完全看不出来**（两者生成同样的指令），
-    /// 只有 Miri 能分辨。这正是"`unsafe` 的契约不写在代码里"的典型例子：
-    /// 两个逐字节等价的写法，一个是 sound 的，一个是 UB。
+    /// 汇编无法分辨；Miri 可以按当前别名模型检查这条执行路径。这正是
+    /// "`unsafe` 的契约不写在机器码里"的典型例子：
+    /// 两个逐字节等价的写法，在本章的后续写入序列中一个仍有效、一个已失效。
     ///
     /// 实测（`cargo +nightly miri test -p ch19-pin`）：
     /// - `addr_of!`     → `Undefined Behavior: ... that tag does not exist
     ///                     in the borrow stack`
     /// - `addr_of_mut!` → 通过
-    pub fn new(p: Pin<&mut Self>, data: u64) -> Self {
-        let this: &mut Self = unsafe { p.get_unchecked_mut() };
-        this.data = data;
-        // SAFETY: 调用者保证了这个值已经钉住（不会再移动），
-        // 所以 this.data 的地址在整个生命周期内稳定。
-        SelfRef {
+    pub fn new(data: u64) -> Pin<Box<Self>> {
+        let mut pinned = Box::pin(SelfRef {
             data,
-            self_ref: std::ptr::addr_of_mut!(this.data),
+            self_ref: std::ptr::null_mut(),
             _pin: PhantomPinned,
-        }
+        });
+        // SAFETY: `pinned` 已经拥有稳定的堆地址；这里只初始化 self_ref，
+        // 不会移动 SelfRef。该指针在 pinned 被销毁前始终指向它自己的 data。
+        let this = unsafe { pinned.as_mut().get_unchecked_mut() };
+        this.self_ref = std::ptr::addr_of_mut!(this.data);
+        pinned
     }
 
     /// 通过自引用指针读 —— 只有在没移动过的前提下才正确。
     ///
     /// ★ 注意这里的裸指针**从哪里来**（见 `make_self_ref`）：
     /// 它来自 `Pin::get_unchecked_mut` 拿到的那个 `&mut SelfRef`。
-    /// 这是 Miri（Stacked Borrows）唯一认账的来源 ——
-    /// 它是一把从 `&mut` 派生出来的、仍然"活着"的钥匙。
+    /// 在当前 Miri Stacked Borrows 模型下，它是一把从 `&mut` 派生出来、
+    /// 与后续访问相容的钥匙。
     ///
     /// 反例：如果裸指针是从 `&self.data`（共享借用）派生的，
     /// 那么一旦有人再写 `data`，那把共享的钥匙就被**弹掉**了，
@@ -121,19 +124,7 @@ impl SelfRef {
 /// 引用汇编时不要把它当常量。
 #[unsafe(no_mangle)]
 pub fn make_self_ref(data: u64) -> Pin<Box<SelfRef>> {
-    let mut b = Box::pin(SelfRef {
-        data: 0,
-        self_ref: std::ptr::null_mut(),
-        _pin: PhantomPinned,
-    });
-    // ★ 关键：拿到 `&mut SelfRef`（而不是 `&SelfRef`）。
-    //   自引用指针必须从**这个**引用派生 —— 因为它的权限足够强，
-    //   之后再写 `data` 也不会把它作废。
-    //   （从 `&this.data` 派生出来的共享指针就做不到，见 `SelfRef::new` 的说明。）
-    let this: &mut SelfRef = unsafe { b.as_mut().get_unchecked_mut() };
-    this.data = data;
-    this.self_ref = std::ptr::addr_of_mut!(this.data);
-    b
+    SelfRef::new(data)
 }
 
 #[unsafe(no_mangle)]
@@ -258,9 +249,9 @@ pub async fn borrow_across_await() -> u64 {
 ///           consider using `Box::pin` if you need to access the pinned value
 /// ```
 ///
-/// 这是编译器**保守**的选择：状态机到底是不是自引用的，
-/// 要在借用检查之后才知道；而 `Unpin` 是 auto trait，必须在类型层立即给出答案。
-/// 于是所有 `async` 产物一律 `!Unpin`，由调用者用 `Box::pin` / `pin!` 钉住。
+/// 这是当前编译器对匿名 async 状态机采取的保守语义。不要从这里进一步推导
+/// 编译器内部 pass 的时序原因；稳定、可依赖的是这些 future 不自动实现 `Unpin`，
+/// 需要时由调用者用 `Box::pin` / `pin!` 钉住。
 ///
 /// 这个"宁可保守"的代价，就是你在异步代码里到处见到 `Box::pin` 的原因。
 #[unsafe(no_mangle)]

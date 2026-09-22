@@ -93,7 +93,7 @@ pub async fn peek_across_await<'a>(v: &'a [u64]) -> u64 {
 
 /// ★ 错误示范（这里**不编译它**，见 `fail/guard_across_await.rs`）：
 ///
-/// ```rust
+/// ```ignore
 /// pub async fn holds_guard_bad(m: &Mutex<u64>) -> u64 {
 ///     let g = m.lock().unwrap();
 ///     std::future::ready(()).await;   // ← g 活过了 await
@@ -120,7 +120,7 @@ pub async fn holds_guard_good(m: &Mutex<u64>) -> u64 {
 ///
 /// 这段代码（见 `fail/drop_does_not_help.rs`）**仍然报 `!Send`**：
 ///
-/// ```rust
+/// ```ignore
 /// let g = m.lock().unwrap();
 /// let v = *g;
 /// drop(g);                       // ← 看起来"用完了"

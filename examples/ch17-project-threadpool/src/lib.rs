@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex};
 ///
 /// ★ 三个约束缺一不可，每一个都对应一章的结论：
 ///
-/// - `FnOnce()` —— 任务只执行一次（第 6 章：`FnOnce` / `FnMut` / `Fn` 的选择）；
+/// - `FnOnce()` —— 任务只执行一次，调用后可以消耗捕获值；
 /// - `Send` —— 任务要跨线程（第 12 章）；
 /// - `'static` —— 任务在线程里存活，不能借用栈上的东西
 ///   （否则线程可能比借用者活得久）。
@@ -165,10 +165,11 @@ pub fn pool_sum(n_workers: usize, data: Vec<u64>) -> u64 {
 /// | 线程创建次数 | N（任务数） | n（worker 数） |
 /// | 队列 | 无（由 OS 调度） | channel |
 /// | 共享可变状态 | 无 | **一处**（`Arc<Mutex<Receiver>>`） |
-/// | 背压 | 无 | 有（channel 容量） |
+/// | 背压 | 无 | **无**（当前是无界 `mpsc::channel`） |
 ///
 /// **线程池把"线程创建"的成本从 N 次降到 n 次**，
 /// 代价是引入了一处共享可变状态和一次 move。
+/// 若需要背压，应改用 `sync_channel` 或其他有界队列。
 #[unsafe(no_mangle)]
 pub fn spawn_per_task(data: Vec<u64>) -> u64 {
     let handles: Vec<_> = data

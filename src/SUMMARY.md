@@ -17,7 +17,7 @@
 # 第二部分：Trait 系统深水区
 
 - [6. 关联类型 vs 泛型参数](./part2/06-associated-types.md)
-- [7. dyn vs 泛型：object safety 与单态化代价](./part2/07-dyn-vs-generics.md)
+- [7. dyn vs 泛型：dyn compatibility 与单态化代价](./part2/07-dyn-vs-generics.md)
 - [8. coherence、孤儿规则与 blanket impl](./part2/08-coherence.md)
 - [9. 高阶 trait bound（HRTB）](./part2/09-hrtb.md)
 - [10. GAT：泛型关联类型](./part2/10-gat.md)
@@ -43,7 +43,7 @@
 - [20. async 中的生命周期与 Send 传染](./part4/20-async-lifetimes.md)
 - [21. async fn in trait 的现状](./part4/21-afit.md)
 - [22. tokio 实战：从原理到工程](./part4/22-tokio.md)
-- [23. 实战：mini async runtime 或并发 echo server](./part4/23-project-runtime.md)
+- [23. 实战：写一个 mini async runtime](./part4/23-project-runtime.md)
 
 ---
 

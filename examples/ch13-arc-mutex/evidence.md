@@ -16,7 +16,7 @@ scripts/verify-all.sh ch13
 |---|---|---|
 | 1 | `Arc::clone` 用 `ldadd` 做原子加 | `ldadd` |
 | 2 | drop 路径有内存屏障 | `dmb` |
-| 3 | 引用计数溢出真的会 `brk` | `brk` |
+| 3 | 超过引用计数软上限时当前构建会 `brk` | `brk` |
 
 ## 原始输出（`.evidence/ch13-arc-mutex-lib.O3.s`，完整函数体）
 
@@ -49,12 +49,13 @@ LBB1_4:
 
 ## 讲法要点
 
-- **`Arc` 的线程安全全部落在这几条指令上**：`ldadd`（加）、`ldaddl`（减）、
+- 包装函数展示了 `Arc` 的几条关键实现指令：`ldadd`（加）、`ldaddl`（减）、
   `dmb ishld`（屏障）、`brk`（溢出）。
-- **`ArcInner` 的布局**：`strong` 在 0、`weak` 在 8、payload 在 **16**
-  —— `ldr x19, [x8, #16]` 就是证据。
+- 当前 `Arc<u64>` 实例的布局是：`strong` 在 0、`weak` 在 8、payload 在 16；
+  这是本次构建的实现观察，不是稳定 ABI。
 - **为什么 `Arc<T>: Send` 需要 `T: Send + Sync`**：payload 是被多线程共享的。
-- **为什么溢出是 `brk #0x1`**：实测确认真的生成，不是文档传说。
+- **为什么出现 `brk #0x1`**：超过 `isize::MAX` 软上限后 abort，
+  防止计数继续增长并最终回绕。
 - **为什么 release 需要 `dmb ishld`**：写入者释放、读者获得。
 
 ## Mutex：★ 平台差异（macOS 上是 pthread，不是 futex）
@@ -64,7 +65,7 @@ LBB1_4:
 `lock_mutex` 的 `-O` AArch64：
 ```asm
 _lock_mutex:
-	ldapr	x0, [x0]          ; ★ 先做一次原子读（fast path 尝试）
+	ldapr	x0, [x0]          ; ★ 读取 pthread Mutex 的 OnceBox 初始化状态
 	cbz	x0, LBB6_5
 	bl	__RNvMNtNtNtNtNt..._3std3sys3pal4unix4sync5mutexNtB2_5Mutex4lock
 	...
@@ -78,7 +79,7 @@ _lock_mutex:
 
 ### 结论
 
-**macOS / Linux 上 `Mutex` 的实现是 `pthread_mutex`，不是 futex。**
+**macOS 上 `Mutex` 的实现是 `pthread_mutex`；Linux 等目标走 futex。**
 
 std 源码（`library/std/src/sys/pal/unix/sync/mutex.rs`）：
 ```rust
@@ -93,12 +94,11 @@ let r = unsafe { libc::pthread_mutex_lock(self.raw()) };
 
 ⚠️ **"Mutex = futex" 是常见的过度简化。**
 - **Windows**：`SRWLock`；
-- **macOS / Linux（std 的默认路径）**：`pthread_mutex`；
-- futex 是 Linux 内核提供的原语，某些锁实现（包括第三方 crate）会用，
-  但**不是 `std::sync::Mutex` 在 macOS 上的路径**。
+- **macOS 等其他 Unix**：`pthread_mutex`；
+- **Linux / Android / FreeBSD 等**：当前 std 走 futex 路径。
 
-→ PLAN §5 表格里"Mutex 的 futex 路径"**在 macOS 上复现不出来**，已修正。
-写作时二选一：讲 macOS 真实的 pthread 路径，或标注"futex 路径需在 Linux 上验证"。
+因此正文只把 pthread 汇编作为 macOS 实测证据；Linux futex 路径来自
+对应工具链的标准库源码，若要引用 Linux 汇编仍需在 Linux 环境验证。
 
 ## 断言（6 条，全绿）
 
@@ -106,7 +106,7 @@ let r = unsafe { libc::pthread_mutex_lock(self.raw()) };
 |---|---|---|
 | 1 | `Arc::clone` 用 `ldadd` 原子加 | `ldadd` |
 | 2 | drop 路径有内存屏障 | `dmb` |
-| 3 | 引用计数溢出真的会 `brk` | `brk` |
+| 3 | 超过引用计数软上限时当前构建会 `brk` | `brk` |
 | 4 | `Arc::clone` 用的是 **Relaxed**（`ldadd` 而非 `ldaddal`） | 见第 16 章的交叉印证 |
 | 5 | `Mutex::lock` 走 `pthread` 实现 | `pal4unix4sync5mutex` |
 | 6 | `try_lock` 是非阻塞路径 | `Mutex8try_lock` |
@@ -151,9 +151,9 @@ grep -o 'Mutex[0-9]*unlock' .evidence/ch13-arc-mutex-lib.O3.s | sort -u
 | 其他 Unix（**包括 macOS**） | `mod pthread;` |
 | Windows 7 | `mod windows7;` |
 
-★ 即使走 futex 路径，`sys::sync::mutex` 也是包在 `OnceBox` 里的
+★ `OnceBox` 属于 pthread 路径
 （`sys/sync/mutex/pthread.rs`：`pal: OnceBox<pal::Mutex>`），
-因为 `pthread_mutex_t` **需要运行时初始化** ——
+因为 `pthread_mutex_t` 需要运行时初始化；futex 路径直接保存原子状态。
 这是"抽象泄漏"的教科书案例：同一个 `Mutex` 概念，
 在两种平台上的**初始化成本**完全不同。
 
@@ -161,4 +161,4 @@ grep -o 'Mutex[0-9]*unlock' .evidence/ch13-arc-mutex-lib.O3.s | sort -u
 
 - [ ] 补 channel（第 14 章）的 example
 - [ ] 第 14 章：`mpsc` 的发送即 move —— 用 MIR 看所有权转移
-- [ ] 如果要讲 futex 快速路径，需要一个 Linux 环境（见 PLAN §13 断点 4）
+- [ ] 如果要加入 futex 汇编证据，需要在 Linux 环境单独验证

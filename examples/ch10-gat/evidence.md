@@ -100,7 +100,7 @@ error: missing required bound on `Item`
 （#87479）—— 说明这是"临时强制、等待未来放宽"的状态。
 **在 1.98.1 上它仍然是强制的。**
 
-## GAT 的代价：不再是 dyn compatible
+## 本章这种 GAT 接口的限制：不能直接 dyn
 
 `fail/gat_not_dyn.rs`：
 
@@ -122,7 +122,7 @@ note: for a trait to be dyn compatible it needs to allow building a vtable
 **这和第 7 章的 E0038 是同一个理由**：vtable 是一张**定长**的表，
 而 GAT 的参数数量不定（`'a` 可以有无穷多个取值），表长无法确定。
 
-> 所以"用 GAT 表达 lending iterator"和"用 `dyn` 做动态分发"
+> 所以按当前规则，"用这个 GAT 表达 lending iterator"和"直接用 `dyn` 动态分发"
 > **不能同时要**。这是 GAT 最主要的实际限制。
 
 ## GAT vs trait 泛型参数
@@ -172,7 +172,7 @@ _sum_windows_manual:
 差异来自 LLVM 的向量化启发式，不来自 GAT。
 
 > ⚠️ 这里只说"指令数几乎相同"，**不说"哪个更快"** ——
-> 本书在没有 benchmark 数据之前不写性能断言（见 PLAN §13 断点 6）。
+> 本书在没有 benchmark 数据之前不写"哪个更快"；这里只比较生成代码。
 
 ## 交叉验证（可选）
 

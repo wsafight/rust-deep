@@ -160,7 +160,8 @@ pub fn safe_double_add(a: &mut i32, b: &i32) {
 /// 你不是写了一个更快的版本，你是**主动放弃了编译器的一项优化**。
 ///
 /// # Safety
-/// 与 `safe_double_add` 相同：`a` 与 `b` 在调用期间不重叠
+/// `a` 必须有效、正确对齐、可读写并指向已初始化的 `i32`；`b` 必须有效、
+/// 正确对齐、可读并指向已初始化的 `i32`；两者在调用期间存活且不重叠。
 #[unsafe(no_mangle)]
 pub unsafe fn raw_double_add(a: *mut i32, b: *const i32) {
     // SAFETY: 调用者保证 a 可写、b 可读、两者不重叠

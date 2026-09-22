@@ -5,6 +5,32 @@
 > `'static` 因为任务可能比调用者活得久。
 > 这一章把第 12、18、20、21 章的结论落到一个真实的 executor 上。
 
+## 先把工具认清
+
+`#[tokio::main]` 创建 runtime 并执行入口 future；`tokio::spawn(future)`
+提交可跨 worker 线程调度的任务；`spawn_blocking` 把阻塞或 CPU 密集闭包移到
+专用线程池；`LocalSet::spawn_local` 则运行不能跨线程的 `!Send` future。
+
+可以把 runtime 看成一家调度中心：`spawn` 把可迁移任务交给公共车队，
+`spawn_local` 把任务留在本地专线，`spawn_blocking` 则把会堵车的工作分流到
+专门车道。选错车道，轻则编译不过，重则把整个 worker 堵住。
+
+### 放到业务里：Web 请求中的数据库、文件和 CPU 工作
+
+数据库请求通常直接 await；旧 SDK 的阻塞调用应放进 `spawn_blocking`；
+跨 await 持有 `Rc` 的任务不能交给 `tokio::spawn`，要改用 `Arc` 或明确放在
+`LocalSet`。`'static` 不表示对象永远存活，只表示任务不借用可能提前离开的
+栈变量，拥有 `String`、`Arc<T>` 等数据完全可以满足它。
+
+```rust
+let body = Arc::clone(&body);
+tokio::spawn(async move { handle(body).await });
+tokio::task::spawn_blocking(move || legacy_sdk_call());
+```
+
+第一行解决共享所有权，`async move` 解决借用寿命，`spawn_blocking` 隔离阻塞；
+它们分别处理不同问题，不能互相替代。
+
 前三章把异步拆到了状态机、`Pin`、`Send` 传染。
 这一章换到**工程视角**：这些机制在 tokio 里长什么样。
 
@@ -82,9 +108,9 @@ pub async fn rc_within_task() -> u64 {
 
 三个现象指向同一个约束的两个半边。
 
-## 22.1 表层解释（官方书会怎么讲）
+## 22.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - tokio 是异步运行时，提供 reactor + executor；
 - `#[tokio::main]` 把 `async fn main` 变成同步 `main` + `block_on`；

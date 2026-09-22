@@ -10,7 +10,7 @@ tools/evidence.sh ch19-pin
 scripts/verify-all.sh ch19      # 13 条断言（PASS=15）
 
 # ★ Miri（需要 nightly，与 verify-all.sh 分开）
-scripts/verify-miri.sh          # 5 条：ch25 两条 + ch19 两条 + 前置检查
+scripts/verify-miri.sh          # 8 组检查（含前置检查）
 ```
 
 ## 关键结论与断言（13 条，全绿）
@@ -29,7 +29,7 @@ scripts/verify-miri.sh          # 5 条：ch25 两条 + ch19 两条 + 前置检�
 | 10 | 拿 `&mut` 必须走 `unsafe` | `.mir` 里 `get_unchecked_mut` |
 | 11 | ★ 状态机里一个字段指向另一个字段 | `.mir` 里 `field _s1: &String` |
 | 12 | `Suspend0` 变体同时装着被借者和借用者 | `.mir` 里 `Suspend0 (3): [_s0, _s1, _s2]` |
-| 13 | ★ 所有 `async` 产物都是 `!Unpin` | `fail/future_not_unpin.rs` → `cannot be unpinned` |
+| 13 | ★ 当前 async 产物不自动实现 `Unpin` | `fail/future_not_unpin.rs` → `cannot be unpinned` |
 
 ## ★ 核心证据一：自引用的运行时形态（一条 `stp`）
 
@@ -40,12 +40,13 @@ pub struct SelfRef {
     _pin: PhantomPinned,
 }
 
-pub fn make_self_ref(data: u64) -> Pin<Box<SelfRef>> {
-    let mut b = Box::pin(SelfRef { data: 0, self_ref: std::ptr::null_mut(), _pin: PhantomPinned });
-    let this: &mut SelfRef = unsafe { b.as_mut().get_unchecked_mut() };
-    this.data = data;
-    this.self_ref = std::ptr::addr_of_mut!(this.data);
-    b
+impl SelfRef {
+    pub fn new(data: u64) -> Pin<Box<SelfRef>> {
+        let mut b = Box::pin(SelfRef { data, self_ref: std::ptr::null_mut(), _pin: PhantomPinned });
+        let this: &mut SelfRef = unsafe { b.as_mut().get_unchecked_mut() };
+        this.self_ref = std::ptr::addr_of_mut!(this.data);
+        b
+    }
 }
 ```
 
@@ -116,7 +117,7 @@ coroutine layout {
 ```
 
 ★ **`_s1: &String` 就是手写版本里的 `self_ref`。**
-第 18 章说"状态机每个 `await` 一个变体"；这里看到的是同一件事的另一面：
+第 18 章展示了挂起点如何进入状态机布局；这里看到的是同一件事的另一面：
 **一个变体里的两个字段互相指涉。这就是编译器必须保守的原因。**
 
 ## ★ 核心证据三：Miri —— `addr_of!` vs `addr_of_mut!`
@@ -140,11 +141,13 @@ this.self_ref = std::ptr::addr_of_mut!(this.data);  // B
 - `addr_of!(place)` → **SharedReadOnly** —— 之后任何一次写都会把它**弹掉**；
 - `addr_of_mut!(place)` → **Unique** —— 写入不会作废它。
 
-自引用结构**必然**要先写 `data`、再写 `self_ref`，所以只有 B 是 sound 的。
+本章构造器会通过独占路径初始化字段，因此必须保证保存的指针不被这些访问
+作废；B 与这段具体访问序列相容。`addr_of!` 本身并不普遍制造 UB。
 
 ★ **这是"`unsafe` 的义务不写在代码里"最具体的一次呈现**：
 两个逐字节等价的写法，编译器生成同样的机器码，
-一个是健全的、另一个是 UB —— **只有 Miri 能分辨。**
+在本章这组后续访问中，一个指针仍有效、另一个已经失效；Miri 可以根据
+机器码中不存在的访问历史分辨。
 
 ### 第二种陷阱：移动后旧地址被释放
 
@@ -155,7 +158,7 @@ error: Undefined Behavior: memory access failed: alloc<N> has been freed,
        so this pointer is dangling
 ```
 
-★ 附带实测结论：**"移动 = memcpy"不必然当场暴露。**
+★ 附带实测结论：**移动后的地址问题不必然当场暴露。**
 如果旧地址还活着（比如只是又复制了一份到栈上），Miri **不报错** ——
 它只在旧地址**真的失效**时才判定悬垂。
 这正是自引用结构最危险的地方：**它可能"碰巧能跑"。**
@@ -209,12 +212,9 @@ error[E0277]: `{async fn body of zero_await()}` cannot be unpinned
 
 ★ **一个不可能自引用的状态机，也被判定为 `!Unpin`。**
 
-原因是一个时序死结：
-
-- "有没有自引用"要等**借用检查之后**才知道；
-- `Unpin` 是 **auto trait**，答案必须在**类型层立即给出**。
-
-编译器没法等，于是**一律保守**：所有 `async` 产物都是 `!Unpin`。
+这是当前编译器对匿名 async 状态机采取的保守语义：这些 future 不会自动
+实现 `Unpin`，即使具体函数没有形成自引用。本证据只证明 API 行为，
+不进一步推断编译器内部 pass 的时序原因。
 
 **代价**：到处要写 `Box::pin` / `pin!`。
 **收益**："自引用 future 一定安全"不需要任何额外规则。
@@ -232,11 +232,8 @@ sed -n '/coroutine layout {/,/storage_conflicts/p' .evidence/ch19-pin-lib.mir
 grep -n 'get_unchecked_mut' .evidence/ch19-pin-lib.mir
 ```
 
-## 待办
+## 当前覆盖
 
-- [x] 13 条断言全绿（`verify-all.sh ch19`）
-- [x] Miri 两条用例（合法 / UB）落库并接入 `verify-miri.sh`
-- [x] 修掉 `src/lib.rs` 里一处**真实的 UB**：`SelfRef::new` 原用
-      `&this.data as *const u64`（SharedReadOnly），改为 `addr_of_mut!`
-- [ ] 第 20 章（`async` 生命周期与 `Send` 传染）需要新 example
-- [ ] 第 21–23 章（AFIT / tokio / mini runtime）均无 example
+- `verify-all.sh ch19` 检查生成代码和编译失败反例；
+- Miri 覆盖合法自引用、移动后悬垂和失效指针；
+- 公共构造器测试验证自引用指向返回对象自身。

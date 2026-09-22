@@ -92,7 +92,8 @@ assert_eq!(a.wrapping_add(*b), 42);      // Miri 下通过，不报 UB
 ```
 
 LLVM 敢同时读 `a`、读 `b`、写 `dst` 而不做任何别名检查，
-**唯一依据就是三个参数的 `noalias`**。这是 `noalias` 从"元数据"变成"实际性能"的画面。
+三个参数的 `noalias` 是允许这类优化的重要依据；是否向量化还取决于
+循环形状、目标特性和优化器启发式。
 
 对照 `two_shared`（两个只读参数）—— 汇编里**没有任何别名检查**：
 ```asm
@@ -103,23 +104,24 @@ _two_shared:
 	ret
 ```
 
-## 证据 5：`captures` —— 比 `noalias` 更细的 Rust 特有约束
+## 证据 5：`captures` —— 比 `noalias` 更细的 LLVM 属性
 
 实测差异：
 - `&mut [u64]`（写）：`captures(none)`
 - `&[u64]` 经 `black_box` 传递：出现过 `captures(address)`
 
-`captures` 描述"callee 能把指针捕获到哪一步"（`address` / `provenance` / `read_provenance` …），
-是 Rust 特有的、比 `noalias` 更细的约束。**值得单独一节讲。**
+`captures` 描述"callee 能把指针捕获到哪一步"（`address` / `provenance` / `read_provenance` …）。
+它属于 LLVM IR；rustc 和其他前端都可以生成，是比 `noalias` 更细的优化信息。
 
-## ★ 证据 6：同一段逻辑 —— 安全引用 5 条指令，裸指针 9 条
+## ★ 证据 6：同一段逻辑 —— 安全引用 5 条指令，裸指针 8 条
 
 ```rust
 pub fn safe_double_add(a: &mut i32, b: &i32) {
     let x = *b; *a += x; *a += *b;
 }
 
-/// # Safety: 与 safe_double_add 相同（a 与 b 不重叠）
+/// # Safety: a/b 必须有效、对齐、已初始化并在调用期间存活；
+/// a 可写、b 可读，且二者不重叠。
 pub unsafe fn raw_double_add(a: *mut i32, b: *const i32) {
     unsafe { let x = *b; *a += x; *a += *b; }
 }
@@ -145,7 +147,7 @@ _safe_double_add:              ; 5 条指令
 	str	w8, [x0]
 	ret
 
-_raw_double_add:               ; 9 条指令
+_raw_double_add:               ; 8 条指令
 	ldr	w8, [x1]
 	ldr	w9, [x0]
 	add	w8, w9, w8
@@ -156,8 +158,8 @@ _raw_double_add:               ; 9 条指令
 	ret
 ```
 
-**讲法**：`unsafe` 版本不是"更快的版本"，而是**主动放弃了编译器的一项优化**。
-LLVM 不是"不优化裸指针"，而是**没有依据去优化** ——
+**讲法**：`unsafe` 本身不是性能开关。这个版本从引用改成裸指针后
+丢失了 `noalias`，LLVM 没有足够依据做同一项优化 ——
 `noalias` 是 Rust 送给 LLVM 的信息，裸指针不携带它。
 
 ★ 这份损失**不报错、不警告、不出现在 profiler 里**。
@@ -165,8 +167,8 @@ LLVM 不是"不优化裸指针"，而是**没有依据去优化** ——
 
 ## 本章与 unsafe 的关系（正文要点）
 
-- `unsafe` 的**唯一义务**：维持这些元数据的**前提**。
+- `unsafe` 必须维护完整的安全不变量；这些 LLVM 属性只是可观察的一部分。
 - 一旦 `unsafe` 撒谎（比如让两个 `&mut` 指向同一处），
   就不是"慢一点"，而是 **UB**——因为 LLVM 已经按 `noalias` 优化过了。
-- **健全性论证的模板**：指出你依赖哪条契约（`noalias` / `readonly` /
-  `dereferenceable` / `captures`），再论证你的 `unsafe` 代码为什么没有破坏它。
+- **健全性论证的模板**：先列出有效性、初始化、对齐、生命周期、别名、
+  provenance、线程安全和析构等不变量，再用 LLVM 属性验证其中可见的一部分。

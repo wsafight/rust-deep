@@ -32,7 +32,7 @@ ok "cargo +nightly miri 可用（$(cargo +nightly miri --version)）"
 #   miri_must_ub   <crate> <test 名> <说明>
 # ⚠️ 变量引用一律用 ${var} 花括号形式：macOS 自带的是 bash 3.2，
 #    它会把紧跟其后的多字节字符（如 `（`）当成变量名的一部分，
-#    在 `set -u` 下直接报 unbound variable（见 PLAN §11.3）。
+#    在 `set -u` 下直接报 unbound variable。
 miri_must_pass() {
   local pkg="$1" t="$2" desc="$3" out="/tmp/rd-miri-${1}-${2}"
   if cargo +nightly miri test -q -p "$pkg" --test "$t" >"$out" 2>&1; then

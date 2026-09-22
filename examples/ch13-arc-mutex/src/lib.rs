@@ -12,13 +12,13 @@ pub fn clone_arc(a: &Arc<u64>) -> u64 {
 
 use std::sync::Mutex;
 
-/// ★ 平台差异：macOS / Linux 上 `Mutex` 走 **`pthread_mutex`**，
-/// 不是 futex。实测调用链：
+/// ★ 平台差异：macOS 上 `Mutex` 走 **`pthread_mutex`**，不是 futex。
+/// Linux、Android、FreeBSD 等目标在当前 std 中走 futex 实现。实测调用链：
 ///   `Mutex::lock` -> `...pal::unix::sync::mutex::Mutex::lock` -> `pthread_mutex_lock`
 /// 锁类型是 `PTHREAD_MUTEX_NORMAL`（std 源码里显式设置，见
 /// `library/std/src/sys/pal/unix/sync/mutex.rs`）。
 ///
-/// ⚠️ Windows 上是 SRWLock，Linux 的某些路径才涉及 futex。
+/// ⚠️ 平台分派属于标准库实现细节，升级工具链后应重新核对。
 /// **"Mutex = futex" 是一个常见的过度简化。**
 #[unsafe(no_mangle)]
 pub fn lock_mutex(m: &Mutex<u64>) -> u64 {

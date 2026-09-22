@@ -215,7 +215,7 @@ grep -n '^_[a-z_]*:' .evidence/ch20-async-lifetimes-lib.O3.s
 
 ## 待办
 
-- [x] 19 条断言全绿（`verify-all.sh ch20`）
+- [x] `verify-all.sh ch20` 全绿
 - [x] 5 个反例落库并加断言
 - [x] 实测并**推翻**了"future 天生 `!Sync`"这一常见说法
 - [ ] 第 21 章（AFIT）需要新 example —— 本章的 `Send` / 生命周期

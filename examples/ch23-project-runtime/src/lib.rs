@@ -11,7 +11,7 @@
 //! |---|---|---|
 //! | 状态机 + `poll` | 18 | 由编译器生成（我们只调用） |
 //! | `Pin<Box<F>>` | 19 | `Task` 里存的就是它 |
-//! | `Waker` / `RawWakerVTable` | 18 | ★ 本章唯一需要 `unsafe` 的地方 |
+//! | `Waker` / `RawWakerVTable` | 18 | ★ 为展示底层契约而手写；也可用安全的 `Wake` |
 //! | 任务队列 + 唤醒 | 18 | `Executor` |
 //! | `Send` 边界 | 22 | 队列跨线程 → `Task` 必须 `Send` |
 //!
@@ -34,7 +34,7 @@ use std::sync::{Arc, Mutex, Weak};
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
 // ============================================================
-// 1) ★ 唯一的 unsafe：把 `Arc<Task>` 变成 `Waker`
+// 1) ★ 刻意下潜的 unsafe：把 `Arc<Task>` 变成 `Waker`
 // ============================================================
 
 /// 一个可执行的任务：一个被 `Pin` 住的 future + 一个回到队列的通道。
@@ -83,7 +83,9 @@ impl Task {
     }
 }
 
-/// ★★ **本章唯一需要 `unsafe` 的地方** —— 构造 `Waker`。
+/// ★★ 本章为展示底层契约而手写 `RawWakerVTable`。
+/// 对 `Arc<T>` 场景也可以实现 `std::task::Wake` 并使用
+/// `Waker::from(Arc<T>)`，从而不在业务代码里手写这段 `unsafe`。
 ///
 /// `Waker` 的接口完全安全，但构造它要**承诺**四个函数的行为符合
 /// `RawWakerVTable` 的契约（第 18 章提过这个微缩样本）：
@@ -147,7 +149,7 @@ fn task_waker(task: &Arc<Task>) -> Waker {
 
     let raw = Arc::into_raw(Arc::clone(task)) as *const ();
     // SAFETY: raw 来自 Arc::into_raw，vtable 的四个函数满足上面列出的契约。
-    // 这是本章唯一一处 unsafe —— 也是全书"安全抽象 + 不安全实现"的样板。
+    // 这是本章刻意下潜的一处 unsafe，也是"安全抽象 + 不安全实现"的样板。
     unsafe { Waker::from_raw(RawWaker::new(raw, &VTABLE)) }
 }
 
@@ -197,9 +199,9 @@ impl Executor {
         self.ready.lock().unwrap().push_back(task);
     }
 
-    /// ★ 运行到**所有任务完成**为止。
+    /// 运行当前就绪队列，直到队列暂时为空。
     ///
-    /// 循环体只有三行 —— 这就是整个 executor：
+    /// 它不会等待未来的跨线程唤醒，因此不保证返回时所有任务都已完成。
     pub fn run(&self) {
         loop {
             // ① 取一个就绪任务（没有就退出）
@@ -243,13 +245,13 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 // 4) 一个会自我唤醒的 future：`YieldNow`
 // ============================================================
 
-/// ★ 一个"让出一次"的 future —— **最简单的手写 `Future` 实现**。
+/// ★ 一个"让出一次"的 future —— 最小的教学用 `Future` 实现之一。
 ///
 /// 它的 `poll` 第一次返回 `Pending`，同时**调用 `waker.wake_by_ref()`**
 /// 把自己重新入队；第二次返回 `Ready`。
 ///
-/// ★ 这是理解 waker 的最佳样本：**"我还没好，但我保证等一下会叫你"**。
-///   真实场景里，"等一下"来自 IO 就绪或定时器；这里我们立刻叫。
+/// ★ 它表达的是："这次还没完成，但状态已经变化，请再 poll 一次。"
+/// 真实场景里，唤醒通常来自 IO 就绪或定时器；这里立即唤醒。
 pub struct YieldNow {
     yielded: bool,
 }

@@ -2,8 +2,34 @@
 
 > 一句话：**第 6–10 章的判据不是并列的清单，是互相牵制的。**
 > 你在第 6 章为了表达力选了泛型参数，第 7 章就会发现 `dyn` 没了；
-> 你在第 10 章为了 lending 选了 GAT，第 7 章又会发现 `dyn` 没了。
+> 你在第 10 章为了 lending 暴露了 GAT，第 7 章又会发现这个 trait 不能直接 `dyn`。
 > **每一处"更强的表达力"，都在削弱"动态分发"。**
+
+## 先把工具摆上桌
+
+本章不引入单个新语法，而是组合关联类型、trait object、GAT、HRTB 和
+blanket impl。重点是学习先列需求，再选择抽象；不能把“最灵活”的语法
+全部叠在一个 trait 上，同时期待它仍然易推断、可动态分发且便于扩展。
+
+这一章可以带着“**抽象预算**”来读：每得到一种表达力，都要问一句它关掉了
+哪扇门。类型系统很少免费送你所有能力，真正的设计是在取舍中找边界。
+
+### 放到业务里：事件存储的投影层
+
+读模型投影既可能需要异构插件集合，又可能按 key 返回不同类型，还可能
+零拷贝借出缓存数据。每加一项需求都会改变公共 API 的可用能力。本章用同一
+投影层逐步加需求，展示何时应拆成两个 trait、何时保留泛型边界、何时把
+动态分发放到更外层。
+
+```rust
+trait Projection {
+    type Output;
+    fn apply(&self, events: &[Event]) -> Self::Output;
+}
+```
+
+先把输出关系说清楚，再决定是否需要 `dyn`、借用输出或按 key 形成类型族；
+这比一开始设计一个“什么都能做”的万能 trait 更容易演进。
 
 ## 11.0 需求
 
@@ -199,8 +225,9 @@ impl KeyedProjection for KeyedSum {
 
 ### 第二扇门关上了：`dyn`
 
-GAT **本身**就足以让 trait 失去 dyn compatibility（第 10 章的 E0038：
-`because it contains generic associated type Out`）。
+本章这个对 dyn 暴露 GAT 的接口会失去 dyn compatibility（第 10 章的 E0038：
+`because it contains generic associated type Out`）。如果关联项只供
+`Self: Sized` 路径使用，结论需要按实际 trait 重新判断。
 
 所以 `KeyedProjection` **只能是静态分发的**。
 "运行时收集一堆投影器"这个需求，在 GAT 这一步没法满足了。
@@ -298,29 +325,30 @@ error[E0119]: conflicting implementations of trait `AllProjections` for type `Su
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `Sum`
 ```
 
-**这就是为什么 stable Rust 里没有特化。**
-blanket impl 已经覆盖了那个类型，特化版本就撞上了。
+**这就是普通 stable coherence 规则下为什么不能直接叠加这两份 impl。**
+Rust 的 specialization 是更大的语言设计问题，目前仍未稳定；不能只用这一例
+解释它为什么尚未稳定。
 
-## 11.7 五扇门的全貌
+## 11.7 这些取舍放在一起
 
 把本章的牵制关系画成一张表：
 
 | 想要的能力 | 代价 | 判据 |
 |---|---|---|
 | 泛型方法（`project_as<T>`） | ❌ `dyn` 没了（E0038） | 第 7 章 |
-| GAT（`Out<K>` / `Out<'a>`） | ❌ `dyn` 没了（E0038） | 第 10 章 |
+| 对 dyn 暴露 GAT（`Out<K>` / `Out<'a>`） | ❌ 当前规则下不能 `dyn`（E0038） | 第 10 章 |
 | blanket impl | ❌ 特化没了（E0119） | 第 8 章 |
 | 借用 `self` 的投影 | ❌ 必须 GAT，于是 `dyn` 没了 | 第 10 章 |
 | 接受任意生命周期的闭包 | ⚠️ 必须 `for<'a>`（写错就 E0597） | 第 9 章 |
 | 关联类型（`Out`） | ✅ **不影响** `dyn` | 第 6 章 |
 
-★ **最后一行是关键**：关联类型是**唯一**"不牺牲 `dyn`"的表达力升级。
-这也解释了为什么 `Iterator` 用关联类型（`Item`）而不是泛型参数 ——
-因为标准库**必须**保住 `Box<dyn Iterator<Item = u8>>`。
+★ **最后一行值得留意**：普通、已指定具体值的关联类型可以与 trait object
+配合；泛型方法和本章这种 GAT 则会让 trait 失去 dyn compatibility。
+这也是 `Iterator<Item = u8>` 能作为 trait object 使用的重要设计收益之一。
 
 **设计 trait 抽象层时的判据顺序**：
 
-1. 先问"**要不要 `dyn`**"？要 → 关掉泛型方法和 GAT；
+1. 先问"**要不要 `dyn`**"？要 → 检查泛型方法和 GAT 是否暴露在 dyn 接口上；
 2. 再问"**一个类型实现几次**"？一次 → 关联类型；一族 → GAT（并接受失去 `dyn`）；
 3. 再问"**要不要 blanket impl**"？要 → 接受没有特化；
 4. 最后问"**闭包要接受多长的生命周期**"？任意 → `for<'a>`。
@@ -377,13 +405,14 @@ scripts/verify-all.sh ch11      # 10 条断言
 ## 11.10 小结
 
 - **五个判据互相牵制**：表达力 ↔ 动态分发，是一对基本矛盾。
-- **关联类型是唯一"不牺牲 `dyn`"的表达力升级** ——
-  这就是 `Iterator` 用 `type Item` 而不是泛型参数的原因。
-- **泛型方法和 GAT 都会毁掉 `dyn`**（E0038），理由都是第 7 章那句
-  "vtable 是定长的"。
+- **普通关联类型可与 `dyn` 配合**，前提是在 trait object 类型里指定其值，
+  如 `dyn Iterator<Item = u8>`；泛型方法和本章这种 GAT 则不行。
+- **泛型方法和本章这种对 dyn 暴露的 GAT 会触发 E0038**；判断时应以
+  当前 dyn compatibility 规则为准，不要只背“vtable 是定长的”。
 - **`dyn` 的代价只在类型真的未知时才付**：实测 `use_dyn`（调用点类型已知）
   的函数体里间接跳转 **0 次**，LLVM 完全去虚化。
-- **blanket impl 与特化不可兼得**（E0119）—— 这是 stable 没有特化的原因。
+- **普通 stable coherence 下，blanket impl 与重叠的具体 impl 会报 E0119**；
+  specialization 仍是未稳定的独立语言特性。
 - **`where Self: 'a` 只有生命周期参数的 GAT 才需要**，
   类型参数的 GAT（`Out<K>`）不需要。
 - **设计顺序**：先定 `dyn` 要不要 → 再定关联类型还是 GAT →

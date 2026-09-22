@@ -1,4 +1,4 @@
-// ⚠️ 故意编译不过：**量化方向反了**（第 9 章的判据）
+// ⚠️ 故意编译不过：**生命周期 bound 的作用域不对**（第 9 章的判据）
 // 复现：rustc --edition 2024 --crate-type=lib examples/ch11-project-abstract/fail/too_weak_bound.rs
 //
 // 预期：

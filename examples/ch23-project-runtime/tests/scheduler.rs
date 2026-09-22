@@ -25,13 +25,14 @@ fn non_send_future_can_block_on() {
     assert_eq!(run_local(), 42);
 }
 
-/// ★★ 一个**不调用 waker** 的 future 会被安静地丢掉。
+/// ★★ 一个本可继续、却没有安排唤醒的 future 会停在队列外。
 ///
 /// 这是 executor 实现里最经典的 bug：`poll` 返回 `Pending` 却忘了
 /// `wake()`，任务就永远躺在队列外面 —— **不报错、不 panic、就是不动**。
 ///
-/// 本用例把这个行为**固化下来**：它证明"唤醒"这件事完全由 future
-/// 自己负责，executor 不会替你检查。
+/// 本用例固化这个教学 executor 的行为：它不会主动重试 Pending 任务。
+/// 注意，按设计永远不完成的 future 可以合法地永远 Pending；错误在于
+/// future 期望继续推进，却没有注册或安排任何唤醒。
 #[test]
 fn pending_without_wake_is_lost() {
     struct NeverWakes;

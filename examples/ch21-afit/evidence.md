@@ -107,8 +107,8 @@ error[E0277]: `dyn Future<Output = u64>` cannot be unpinned
   = note: required for `Box<dyn Future<Output = u64>>` to implement `Unpin`
 ```
 
-**原因**：`.await` 的 blanket impl 要求 `F: Future + Unpin`，
-而 **trait object 默认 `!Unpin`**（vtable 里没有 `Unpin` 的信息）。
+**原因**：`Box<F>` 只有在 `F: Future + Unpin` 时才实现 `Future`；
+这里的 `dyn Future` 没有 `Unpin` bound。`.await` 本身不普遍要求 `Unpin`。
 
 **修法**：
 

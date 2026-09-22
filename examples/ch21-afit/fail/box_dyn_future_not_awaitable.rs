@@ -7,8 +7,9 @@
 //      = note: required for `Box<dyn Future<Output = u64>>` to implement `Unpin`
 //
 // ★ 这是第 19 章的知识在一个新地方冒出来：
-//   `.await` 的 blanket impl 要求 `F: Future + Unpin`，
-//   而 **trait object 默认 `!Unpin`**（vtable 里没有 Unpin 的信息）。
+//   `Box<F>` 只有在 `F: Future + Unpin` 时才实现 Future；这里的
+//   `dyn Future` 没有 `Unpin` bound。`.await` 本身并不普遍要求 Unpin，
+//   `Pin<Box<dyn Future>>` 可以直接 await。
 //
 // ★ 修法：`Box::into_pin` —— 把 `Box<dyn Future>` 变成 `Pin<Box<dyn Future>>`。
 //   这正是"`Pin` 用借用的可变性表达能不能移动"的又一个实例（第 19 章）：

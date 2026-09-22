@@ -34,7 +34,7 @@ _7 = std::sync::mpsc::channel::<Box<dyn FnOnce() + Send>>() -> [return: bb4, unw
 
 | 约束 | 为什么 | 来自 |
 |---|---|---|
-| `FnOnce()` | 任务只执行一次 | 第 6 章 |
+| `FnOnce()` | 任务只执行一次，调用后可消耗捕获值 | 标准闭包 trait |
 | `Send` | 任务跨线程执行 | 第 12 章 |
 | `'static` | 任务在线程里存活 | 线程生命周期 |
 
@@ -156,14 +156,16 @@ error[E0277]: `Rc<u64>` cannot be sent between threads safely
 | 线程创建次数 | **N**（任务数） | **n**（worker 数） |
 | 队列 | 无（OS 调度） | channel |
 | 共享可变状态 | **无** | **一处**（`Arc<Mutex<Receiver>>`） |
-| 背压 | 无 | 有 |
+| 背压 | 无 | **无**（当前使用无界 `mpsc::channel`） |
 | 任务类型 | 任意 `FnOnce + Send` | 任意 `FnOnce + Send` |
 
 **这不是"线程池一定更好"** —— 如果任务数很少，
 `spawn_per_task` 更简单、**零共享**、没有队列开销。
 
-> 本书在没有 benchmark 数据之前不写"哪个更快"（PLAN §13 断点 6）。
-> 这里只说结构上的差异。
+> 本书在没有 benchmark 数据之前不写"哪个更快"。这里只说结构上的差异。
+
+若需要背压，应改用有界 `sync_channel` 或其他有界队列，并明确队列满时
+阻塞、丢弃还是返回错误。
 
 ## 交叉验证（可选）
 

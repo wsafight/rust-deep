@@ -1,4 +1,4 @@
-// ⚠️ 故意编译不过：**带 GAT 的 trait 不是 dyn compatible**
+// ⚠️ 故意编译不过：**本章这个对 dyn 暴露 GAT 的 trait 不是 dyn compatible**
 // 复现：rustc --edition 2024 --crate-type=lib examples/ch10-gat/fail/gat_not_dyn.rs
 //
 // 预期：

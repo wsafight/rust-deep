@@ -1,15 +1,41 @@
 # 23. 实战：写一个 mini async runtime
 
-> 一句话：**executor 的全部状态就是一个队列，核心循环只有三行。**
-> 剩下的全部复杂度，都在"waker 什么时候被调用"这一件事上。
+> 一句话：最小 executor 的核心是就绪队列与 `poll`；真正可长期运行的
+> executor 还必须处理等待、并发唤醒、重复入队、取消和任务生命周期。
+
+## 先把组件认清
+
+executor 保存待运行的 `Task`，从就绪队列取出任务并调用 `poll`。future 若
+暂时不能完成，会保存当前 `Waker`；资源就绪后调用 `wake`，把任务重新标记为
+可运行。`RawWakerVTable` 是这套安全接口底下的裸指针协议，也可由安全的
+`Wake` trait 封装。
+
+如果把 future 当作暂停中的工单，那么 ready queue 是待办列表，`poll` 是处理
+一次，`wake` 则是把工单重新贴回待办墙。难点不在“取下一张”，而在同一张
+工单何时、由谁、能否重复贴回来。
+
+### 放到业务里：一次 socket 就绪如何唤醒请求任务
+
+HTTP 任务读 socket 时得到 `Pending`，IO 驱动保存它的 waker；内核报告 fd
+可读后，驱动调用 `wake`，任务重新进入 ready queue，下一次 poll 才继续解析
+请求。本章的队列模型展示这条主链路，但不实现 park、IO 驱动、取消和公平性，
+因此只能作为教学 executor。
+
+```text
+socket 未就绪 → poll 返回 Pending → 驱动保存 waker
+socket 可读   → wake               → task 回到 ready queue
+worker 取任务 → 再次 poll          → 继续解析请求
+```
+
+这条闭环比“反复调用 poll”更接近真实 runtime：没有 wake，就没有下一次 poll。
 
 第 18–22 章把异步的每一块都拆开讲了。这一章把它们拼起来 ——
 **从零写一个能跑的 executor**，然后看清 tokio 在上面加了什么。
 
-★ 这一章也是全书**唯一一处 `unsafe` 是不可回避的**：
-构造 `Waker` 需要实现 `RawWakerVTable` 的四个函数，
-而它们的契约（引用计数配平）**编译器和 MIR 都看不见** ——
-只能靠 Miri 和你的论证。
+★ 本章刻意手写 `RawWakerVTable`，借此展示 Waker 最底层的引用计数契约。
+这不是构造 Waker 的唯一方式：基于 `Arc<T>` 的场景也可以实现安全的
+`std::task::Wake`，再用 `Waker::from(Arc<T>)`。选择 RawWaker 是为了教学下潜，
+其契约编译器无法全部检查，需要论证并辅以 Miri。
 
 ## 23.0 一个会让你卡住的例子
 
@@ -50,8 +76,9 @@ impl Executor {
 }
 ```
 
-**看起来对。但有个致命的坑**：如果某个任务的 `poll` 返回 `Pending`
-**却不调用 waker**，这个任务就**永远躺在队列外面** ——
+**看起来对。但有个致命的坑**：如果某个本来还能取得进展的任务返回
+`Pending`，却既没有注册唤醒来源，也没有安排一次唤醒，它就会永远躺在
+队列外面 ——
 
 **不报错、不 panic、什么都不打印，就是不动。**
 
@@ -78,9 +105,9 @@ unsafe { Waker::from_raw(RawWaker::new(data, &VTABLE)) }
 
 三个问题，指向同一个东西：**executor 的复杂度全在 waker 上。**
 
-## 23.1 表层解释（官方书会怎么讲）
+## 23.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - executor 负责 poll future 并在就绪时唤醒它；
 - `Waker` 是"怎么被叫醒"的抽象；
@@ -98,8 +125,8 @@ unsafe { Waker::from_raw(RawWaker::new(data, &VTABLE)) }
 
 | 类型 | 是什么 |
 |---|---|
-| `Task` | 一个被 `Pin` 住的 future + 一个回到队列的通道 |
-| `Executor` | **一个队列**（`Mutex<VecDeque<Arc<Task>>>`） |
+| `Task` | 一个被 `Pin` 住的 future + 一个回到队列的句柄 |
+| `Executor` | 一个教学用就绪队列（`Mutex<VecDeque<Arc<Task>>>`） |
 | `YieldNow` | 一个会自我唤醒的 future（用来演示 waker） |
 
 ### 23.2.2 `Task`：三个字段各有来历
@@ -125,9 +152,9 @@ pub struct Task {
 
 ★ 关于 `Weak`：`Executor` 持有 `Arc<Task>`，如果 `Task` 也持有
 `Arc<Executor>`，两者**永远不会被释放**。用 `Weak` 让"任务→executor"
-这条边**不增加引用计数**。这是第 13 章那个"引用环"问题在这里的复现。
+这条边**不增加引用计数**。这是第 5 章 `Rc` 循环引用问题在异步运行时里的复现。
 
-### 23.2.3 ★ 唯一的 `unsafe`：`RawWakerVTable` 的四个函数
+### 23.2.3 ★ 刻意下潜的 `unsafe`：`RawWakerVTable` 的四个函数
 
 ```rust
 fn task_waker(task: &Arc<Task>) -> Waker {
@@ -156,9 +183,9 @@ fn task_waker(task: &Arc<Task>) -> Waker {
 ★ **四个函数里的任何一个写错，都是内存泄漏或 use-after-free。**
 而编译器**完全无法检查** —— 它们都是 `unsafe fn`，类型是裸的 `*const ()`。
 
-**这是第 24 章那句话最纯粹的形态**：
+**这是第 24 章安全不变量的一个具体形态**：
 
-> **`unsafe` 的义务是维持契约的前提。**
+> **`unsafe` 代码必须维持安全抽象依赖的不变量。**
 > 而这里的契约是关于**引用计数配平**的，编译器和 MIR 都看不见。
 
 ★ **Miri 能检查这件事**（`scripts/verify-miri.sh`）：
@@ -168,10 +195,10 @@ cargo +nightly miri test -p ch23-project-runtime --test scheduler
 # 6 passed —— 含一个跨线程唤醒的用例
 ```
 
-Miri 会跟踪每一次 `Arc` 引用计数的增减，**配平错了它会报**。
-这是全书里 Miri "最物有所值"的一次。
+Miri 可以在这些测试路径上发现由引用计数错误引起的泄漏或无效访问。
+它不能证明所有路径都正确，但很适合给这类裸指针协议做动态检查。
 
-### 23.2.4 `wake` 的全部含义：入队
+### 23.2.4 在这个 executor 里，`wake` 的效果是入队
 
 ```rust
 fn wake_task(task: Arc<Task>) {
@@ -181,12 +208,13 @@ fn wake_task(task: Arc<Task>) {
 }
 ```
 
-★ **这一行就是"唤醒"的全部含义 —— 没有魔法，就是入队。**
+★ 对这个教学实现来说，唤醒的直接效果就是入队。生产 runtime 往往还会
+更新原子任务状态、合并重复唤醒，并通知正在休眠的 worker。
 
 （如果 `upgrade` 失败，说明 executor 已经没了，任务被安静地丢掉。
 真实 executor 还要处理取消、panic、`JoinHandle` 等，但核心就是这一行。）
 
-### 23.2.5 `run`：整个 executor 就是这三行
+### 23.2.5 `run`：最小调度循环只有几行
 
 ```rust
 pub fn run(&self) {
@@ -210,7 +238,7 @@ _run_three:
 	bl	...VecDeque...grow    ; ★ 队列增长
 ```
 
-**三个断言都能在汇编里找到**（`verify-all.sh ch23`）：
+**下面三种实现痕迹都能在汇编里找到**（`verify-all.sh ch23`）：
 
 | 断言 | 说明 |
 |---|---|
@@ -236,10 +264,11 @@ impl Future for YieldNow {
 }
 ```
 
-★ 这一行就是"我还没好，但我保证等一下会叫你"。
+★ 这一行表示"我的状态已经改变，请再次 poll 我"。
 
-**如果漏掉 `wake_by_ref()`，任务会永远卡在 `Pending` 上** ——
-executor 不会替你检查这件事。这个行为被固化成了一个测试：
+**如果一个仍可能取得进展的 future 既不注册外部唤醒来源，也漏掉这里的
+`wake_by_ref()`，任务就会永远卡在 `Pending` 上**。executor 不会替你检查
+这个逻辑错误。该行为被固化成了一个测试：
 
 ```rust
 #[test]
@@ -276,12 +305,15 @@ cargo run -p ch23-project-runtime
 | `Ready(v)` | 完成了 | 丢掉任务 |
 | `Pending` | 还没好 | **等** —— 但等到什么时候？ |
 
-`Pending` 的语义是"**现在还不能推进，但我保证将来会叫你**"。
-"叫你"就是调用 waker。而 waker 做的事就是**把任务放回队列**。
+`Pending` 的语义只是"**这次 poll 尚未完成**"。如果 future 之后可能取得
+进展，它必须确保最近一次传入的 waker 会在合适时机被调用；一个按设计
+永远不完成的 future，则可以永远保持 `Pending`。在本实现里，waker 的作用
+是把任务放回就绪队列。
 
 ★ **所以整个 executor 的协议只有一条**：
 
-> `poll` 返回 `Pending` 时，**它必须保证将来某时刻会调用 waker**。
+> future 返回 `Pending` 后，若其状态变化可能让下一次 poll 取得进展，
+> 它必须安排或注册对当前 waker 的唤醒。
 
 **这条协议无法被类型系统检查** —— 漏掉就是任务静默丢失（23.2.6）。
 
@@ -308,7 +340,9 @@ where F: Future<Output = ()> + Send + 'static
 `poll` 在 worker 线程，`wake` 可能在 IO 线程。
 
 `RefCell` 是 `!Sync`（第 12 章），在 `Arc` 里用会直接编译失败。
-`Mutex` 是这里唯一的选择。
+这里需要某种同步的内部可变性；`Mutex` 是最直接的教学实现，
+但并非唯一可能方案。单线程 executor 可用 `RefCell`，生产级实现也可能
+用任务所有权、原子状态机或更细粒度的同步来避免每次 poll 都持有该锁。
 
 ★ 注意锁的粒度：**这个锁只在 `poll` 期间持有**。
 真实的 executor 会做得更细（比如只在拿 `&mut future` 时锁），
@@ -359,8 +393,8 @@ executor: Weak<Executor>,     // ← 不能是 Arc
 用 `Arc` 的话，`Executor -> Arc<Task> -> Arc<Executor>` 形成引用环，
 **两者永远不会被释放** —— 而且**不会有任何报错**。
 
-★ 这是第 13 章那个"引用环"问题在这里的复现。
-区别是：第 13 章的环在数据结构里（父子节点互相持有），
+★ 这是第 5 章那个"引用环"问题在这里的复现。
+区别是：第 5 章的环在数据结构里（父子节点互相持有），
 这里的环在**执行模型**里（任务和调度器互相持有）。
 
 ### 反直觉之四：写 executor 的难点**不在调度**，在 waker
@@ -374,7 +408,7 @@ executor: Weak<Executor>,     // ← 不能是 Arc
 |---|---|
 | 队列、循环、`Pin<Box<...>>` | ✅ 类型系统 |
 | `Send` 边界 | ✅ 类型系统 |
-| **waker 的引用计数配平** | ❌ **只有 Miri** |
+| **waker 的引用计数配平** | ❌ 类型系统不能完整证明；Miri 可检查测试路径 |
 
 **所以"executor 是 `unsafe` 高发区"这句话是准确的** ——
 而这个 `unsafe` 的形态是**引用计数配平**，不是别名。
@@ -423,13 +457,15 @@ scripts/verify-all.sh ch23      # 5 条断言
 1. `cargo run` 输出 **`order = [0, 1, 2]`** —— 调度行为可预测；
 2. `cargo test` **6 个用例全绿**，其中包括
    `pending_without_wake_is_lost`（证明"漏掉 waker 就丢任务"）；
-3. **`cargo +nightly miri test` 全绿** —— 手写 waker 的引用计数是配平的；
+3. **`cargo +nightly miri test` 全绿** —— 在这些测试路径和当前 Miri
+   可检查范围内，没有发现手写 waker 的引用计数或内存错误；
 4. `run_three` 的汇编里有 `___rust_alloc`、`ldadd`、`VecDeque...grow`
    —— 任务真的在堆上、引用计数真的走原子操作、队列真的会增长。
 
 ## 23.6 与 unsafe 的关系
 
-本章是全书**唯一一处 `unsafe` 不可回避**的地方。收成三条：
+本章选择进入 RawWaker 层，因此出现了一处集中的 `unsafe`。
+若改用 `Wake` + `Waker::from(Arc<T>)`，这个教学 executor 可以避免手写它。
 
 ### 这一处的 `unsafe` 契约是什么
 
@@ -462,7 +498,8 @@ unsafe fn wake(data: *const ())
 cargo +nightly miri test -p ch23-project-runtime --test scheduler
 ```
 
-Miri 会跟踪每一次 `Arc` 引用计数的增减。**配平错了它会报。**
+Miri 能发现这些测试路径上由错误引用计数引起的泄漏或无效访问，
+但通过不等于对所有路径的完整证明。
 
 ★ 但记住第 25 章的提醒：
 **Miri 通过不等于 sound**（Stacked Borrows 仍是实验性的）。
@@ -495,18 +532,19 @@ IO 驱动、定时器、取消、panic 传播、park/unpark、公平调度……
 
 ## 23.7 小结
 
-- **executor 的全部状态就是一个队列，核心循环只有三行**：
+- **这个教学 executor 的显式调度状态是一条就绪队列，核心循环只有几行**：
   取一个就绪任务 → poll → 如果 `Pending` 就等 waker 把它放回来。
-- **`wake` 的全部含义就是"入队"** —— 没有魔法。
-- **`Poll::Pending` 是一条承诺**："我保证将来会调用 waker"。
-  漏掉就是任务**静默丢失** —— 不报错、不 panic、就是不动。
+- **在这个实现里，`wake` 的效果就是重新入队**；生产 runtime 还要维护
+  原子任务状态、去重、跨线程通知等信息。
+- **`Poll::Pending` 表示本次尚未完成**；一个仍可能取得进展的 future
+  必须正确注册或安排唤醒。漏掉会让任务静默停住。
   （本章把它固化成了一个测试。）
 - **`Task` 的三个字段各有来历**：
   `Pin<Box<...>>`（第 19 章）、`Mutex<Option<...>>`（`poll` 要 `&mut`）、
-  **`Weak<Executor>`（打破引用环，第 13 章）**。
-- **★ 本章唯一的 `unsafe` 是 `RawWakerVTable`**：
+  **`Weak<Executor>`（打破引用环，第 5 章）**。
+- **★ 本章为了展示底层契约而手写 `RawWakerVTable`**：
   四个函数的契约是**引用计数配平**。写错就是内存泄漏或 use-after-free，
-  **编译器和 MIR 都看不见** —— 只有 **Miri** 能查。
+  编译器和 MIR 无法完整证明；Miri 可以检查测试实际覆盖到的执行路径。
 - **`block_on` 不需要 `Send`**（实测含 `Rc` 的 future 能跑）——
   又一次印证第 22 章：**`Send` 的要求来自"交给谁"，不来自 `async`**。
 - **写 executor 的难点不在调度，在 waker**：
@@ -523,7 +561,7 @@ IO 驱动、定时器、取消、panic 传播、park/unpark、公平调度……
 20  async 生命周期       → 跨 await 的字段决定 Send
 21  AFIT                 → trait 里的 async 撞上 dyn 和 Send
 22  tokio                → Send + 'static 的工程形态
-23  mini runtime         → 把上面全部拼起来（含唯一的 unsafe）
+23  mini runtime         → 把上面全部拼起来（刻意下潜到 RawWaker）
 ```
 
 第五部分进入 `unsafe` 与 soundness —— 从第 23 章这个"引用计数配平"

@@ -108,7 +108,7 @@ pub fn spawn_shared(s: Arc<str>) -> tokio::task::JoinHandle<usize> {
 
 /// ★ 不能做的事：借用局部变量（见 `fail/borrow_local.rs`）。
 ///
-/// ```rust
+/// ```ignore
 /// pub async fn bad() {
 ///     let v = vec![1u64, 2];
 ///     tokio::spawn(async { v.len() });   // ← 借用 v，不是 'static
@@ -230,7 +230,7 @@ where
 /// ★ 注意 `#[tokio::main]` 做的事：**构造一个 runtime 并 block_on**。
 /// 它等价于手写：
 ///
-/// ```rust
+/// ```ignore
 /// fn main() {
 ///     tokio::runtime::Runtime::new().unwrap().block_on(async { ... })
 /// }

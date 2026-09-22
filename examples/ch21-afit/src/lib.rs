@@ -80,7 +80,7 @@ pub async fn use_store_mem() -> u64 {
 
 /// ★ 这样写**编译不过**（见 `fail/afit_not_send.rs`）：
 ///
-/// ```rust
+/// ```ignore
 /// pub trait StoreBad {
 ///     async fn get(&self, k: u64) -> u64;
 /// }
@@ -151,8 +151,8 @@ impl StoreDyn for Mem {
 /// error[E0277]: `dyn Future<Output = u64>` cannot be unpinned
 /// ```
 ///
-/// 原因：`.await` 的 blanket impl 要求 `F: Future + Unpin`（第 19 章），
-/// 而 `dyn Future` **不是 `Unpin`**（trait object 默认 `!Unpin`）。
+/// 原因：`Box<F>` 只有在 `F: Future + Unpin` 时才实现 `Future`；
+/// 这里的 `dyn Future` 没有 `Unpin` bound。`.await` 本身不普遍要求 `Unpin`。
 ///
 /// 修法：`Box::into_pin` 把它变成 `Pin<Box<dyn Future>>`。
 #[unsafe(no_mangle)]
@@ -169,7 +169,7 @@ pub async fn use_store_dyn(s: &dyn StoreDyn) -> u64 {
 
 /// ★ 这样写**编译不过**（见 `fail/afit_not_dyn.rs`）：
 ///
-/// ```rust
+/// ```ignore
 /// pub trait Store { async fn get(&self, k: u64) -> u64; }
 /// pub fn make() -> Box<dyn Store> { todo!() }
 /// ```
@@ -198,7 +198,7 @@ pub async fn use_store_dyn(s: &dyn StoreDyn) -> u64 {
 /// 下面是**编译不过**的（见 `fail/rpitit_send_at_impl.rs`）——
 /// 注意错误指向的是 `impl` 里那几行，而不是任何调用点：
 ///
-/// ```rust
+/// ```ignore
 /// pub struct Bad;
 /// impl StoreSend for Bad {
 ///     fn get(&self, k: u64) -> impl Future<Output = u64> + Send {

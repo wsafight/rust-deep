@@ -359,7 +359,7 @@ error[E0597]: `local` does not live long enough
 
 1. **不变性**（第 3 章）：`&mut T` 在 `T` 上**不变**，
    于是 `&'static mut T` 不能收缩成 `&'a mut T`；
-2. **HRTB 量化方向反了**（第 9 章）：该写 `for<'a> F: Fn(&'a T)` 时
+2. **HRTB 的生命周期作用域写错了**（第 9 章）：该写 `for<'a> F: Fn(&'a T)` 时
    写成了函数签名上的 `'a`。
 
 **章**：3、9、11。
@@ -406,7 +406,7 @@ error: assigning to `&T` is undefined behavior, consider using an `UnsafeCell`
 它把**铸型点**和**写入点**一起标出来 —— UB 是这两件事**合起来**造成的。
 
 ⚠️ 但它是**局部的**：只看得到同一函数体内的铸型 → 写入链。
-跨函数 + `black_box` 就抓不到（只有 Miri 能）。
+跨函数 + `black_box` 就可能抓不到；Miri 可以在具体执行路径上补充检查。
 
 **章**：25。**反例**：`ch25-aliasing/fail/write_through_shared_ref.rs`。
 

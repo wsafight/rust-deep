@@ -2,8 +2,34 @@
 
 > 一句话：`async fn` **不是**"开始执行"，而是"**构造一个还没开始的执行**"。
 > 编译器把 `async fn` 的函数体编译成一个**状态机**（coroutine），
-> 每个 `await` 是状态机的一个**挂起点**。
+> 每个可能返回 `Pending` 的 `await` 都是潜在**挂起点**。
 > 而"推进状态机"这件事，必须由 executor 通过 `poll` 来做。
+
+## 先把语法认清
+
+`async fn` 调用后返回一个实现 `Future` 的值；`.await` 在当前异步任务中
+轮询该 future，未完成时保存状态并让出执行权。底层协议是
+`Future::poll(Pin<&mut Self>, &mut Context)`，返回 `Ready` 或 `Pending`。
+
+最直观的比喻是：future 是一张**可暂停的流程单**。调用 `async fn` 只是把
+流程单打印出来，`.await` 和 executor 才会把它一步步往下推进。
+
+### 放到业务里：并发调用多个下游服务
+
+API 网关常同时请求用户、库存和价格服务。同步线程在等待网络时只能阻塞；
+future 则把“已经发送请求、等待 socket 就绪”的状态保存下来，让 executor
+运行其他任务。收益来自高并发等待场景，不是把 CPU 密集函数简单标成
+`async`；CPU 重活仍应交给专用线程池。
+
+```rust
+let (user, stock, price) = tokio::join!(
+    load_user(id),
+    load_stock(sku),
+    load_price(sku),
+);
+```
+
+三个 future 可以交错等待 IO；它们不是自动并行线程，而是由 runtime 持续 poll。
 
 ## 18.0 一个会让你卡住的例子
 
@@ -37,9 +63,9 @@ fn main() {
 这一章要把这件事拆开：`async fn` 到底被编译成了什么，
 以及"执行"这件事为什么必须由外部驱动。
 
-## 18.1 表层解释（官方书会怎么讲）
+## 18.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - `Future` 是一个 trait，有 `poll` 方法，返回 `Poll::Ready` 或 `Poll::Pending`；
 - `.await` 会挂起当前任务，等 future 就绪后继续；
@@ -84,7 +110,7 @@ fn two_awaits(_1: u64, _2: u64) -> {async fn body of two_awaits()} {
 **这就是"惰性"的机器含义**：调用 `async fn` = **构造状态机**，
 **不执行任何用户代码**。
 
-### 18.2.2 状态机的布局：每个 `await` 一个变体
+### 18.2.2 状态机的布局：挂起点落进不同状态
 
 同一个 MIR 文件里，状态机的 `poll` 实现（`two_awaits::{closure#0}`）
 开头就有完整的布局：
@@ -117,7 +143,7 @@ fn two_awaits::{closure#0}(_1: Pin<&mut {async fn body of two_awaits()}>, _2: &m
 | **`Suspend0(3)`** | **第一个 `await` 挂起在这里**，活着的变量是 `_s0`、`_s2` |
 | **`Suspend1(4)`** | **第二个 `await` 挂起在这里**，活着的变量是 `_s1`、`_s3` |
 
-★ **`Suspend0` / `Suspend1` 就是两个 `.await` 的落点。**
+★ 在这份 MIR 中，**`Suspend0` / `Suspend1` 就是两个 `.await` 的落点。**
 "挂起"在实现上就是"记住当前在哪个变体 + 哪些变量还活着"。
 
 `storage_conflicts` 那个位矩阵是借用检查的产物 ——
@@ -180,7 +206,9 @@ size_of_val(&no_await(1))                   // → 16
 | `two_awaits(1, 2)` | **56** | 两个 `u64` + 两个 `Ready<u64>` + 判别式/填充 |
 | `no_await(1)` | **16** | 捕获了 `a: u64`（8）+ 判别式（8，对齐） |
 
-**大小 = 所有跨 `await` 存活的变量之和**（加上判别式和对齐）。
+状态机要容纳各个挂起状态中需要保留的字段，并为这些状态复用存储；
+因此大小通常接近"最占空间的挂起变体 + 判别式 + 对齐"，而不是把所有
+跨 `await` 的局部变量机械相加。具体布局仍是编译器实现细节。
 
 ★ 这解释了一个很多人踩过的坑：**`async fn` 不能递归**。
 
@@ -209,7 +237,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 }
 ```
 
-**executor 的全部工作就是"反复 poll 直到 Ready"。**
+这个教学版 `block_on` 的循环只是反复 poll 直到 Ready。
 
 真实的 executor 会做得更好：不忙等，而是**注册 waker**，
 在 `Poll::Pending` 时挂起，等被唤醒再 poll。
@@ -254,7 +282,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 > | 栈 | 运行时管理（可增长） | **状态机（编译期固定大小）** |
 > | 挂起点 | 任何函数调用 | **只能 `.await`** |
 >
-> Rust 的选择换来了**零运行时**：没有 GC、没有调度器、
+> Rust 的选择换来了**没有语言内置异步运行时**：没有强制 GC 或调度器，
 > 状态机大小在编译期已知（可以放在栈上）。
 > 代价是**你必须自己选一个 executor**（tokio / async-std / smol / 手写）。
 
@@ -331,7 +359,7 @@ error[E0733]: recursion in an async fn requires boxing
 ★ 注意编译器的措辞：**"to avoid an infinitely sized future"** ——
 它直接说出了原因。**这个错误码 E0733 本身就证明了"状态机大小"这个概念。**
 
-### 反直觉之四：没有 `await` 的 `async fn` 也有开销
+### 反直觉之四：没有 `await` 的 `async fn` 也有状态机表示
 
 ```rust
 async fn no_await(a: u64) -> u64 { a }
@@ -339,11 +367,12 @@ async fn no_await(a: u64) -> u64 { a }
 
 实测大小是 **16 字节**（捕获 `a` + 判别式），而不是 0。
 
-**`async fn` 的"异步"是编译期的类型变化，不是零成本的。**
-一个不需要挂起的异步函数，其状态机仍然要占空间、仍然要经过 `poll`。
+**`async fn` 的"异步"首先是类型和控制流表示的变化。**
+一个不需要挂起的异步函数仍有 future 值，也通过 `poll` 协议完成；
+但这不等于最终程序必然多出可测的运行时开销，内联后这些结构可能被优化掉。
 
-> 所以"把同步函数标成 `async`"不是免费的 ——
-> 它会引入状态机、`Pin`、以及调用方的 `.await`。
+> 所以不能仅凭"函数里没有 await"就断言表示大小为零；是否形成实际性能
+> 开销仍需在真实调用点测量生成代码或 benchmark。
 
 ## 18.5 亲手验证
 
@@ -419,13 +448,14 @@ unsafe { Waker::from_raw(RawWaker::new(std::ptr::null(), &VTABLE)) }
 - **调用 `async fn` = 构造状态机**：MIR 里函数体只有一条
   `{coroutine@...} { a, b }` —— **不执行任何用户代码**。
   这就是"惰性"的机器含义。
-- **每个 `.await` 是状态机的一个变体**：
+- **每个潜在挂起点要由状态机记录**；在本章 MIR 中表现为：
   `Suspend0(3)` / `Suspend1(4)`（加上 `Unresumed(0)` / `Returned(1)` / `Panicked(2)`）。
   "挂起" = 写一个判别式；"恢复" = 读一个判别式。
 - **惰性的运行期证据**：`lazy_demo` 输出
   `after construct: N = 0` / `after drop: N = 0` / `after poll: N = 1`。
-- **状态机大小 = 跨 `await` 存活的变量之和**：
-  `two_awaits` = 56 字节，`no_await` = 16 字节。
+- **状态机要容纳最占空间的挂起状态、判别式与对齐**：
+  当前构建中 `two_awaits` = 56 字节，`no_await` = 16 字节；
+  不同状态间的字段可能复用存储，布局不是简单求和。
   这解释了**为什么 `async fn` 不能递归**（大小会无穷大）。
 - **executor 的核心循环就是 `loop { poll }`** ——
   状态机不会自己跑，必须由外部驱动。

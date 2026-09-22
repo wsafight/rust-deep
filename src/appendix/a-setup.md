@@ -74,15 +74,16 @@ rustup target add x86_64-apple-darwin
 
 ```bash
 # 构建书
+cargo install mdbook --locked   # 尚未安装时
 mdbook serve --open
 
-# 一键验证全书证据（编译 + 生成证据 + 断言，268 条）
+# 一键验证全书证据（可选 target 缺失时显示 SKIP）
 scripts/verify-all.sh
 
 # 只验证某一章（编译、证据、断言都受此过滤）
 scripts/verify-all.sh ch07
 
-# Miri 验证（8 条，需要 nightly；与上面分开）
+# Miri 验证（8 组检查，需要 nightly；与上面分开）
 scripts/verify-miri.sh
 ```
 

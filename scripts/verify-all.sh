@@ -8,10 +8,13 @@ cd "$(dirname "$0")/.."
 filter="${1:-}"
 fail=0
 pass=0
+skipped=0
 
 section() { printf '\n\033[1m== %s ==\033[0m\n' "$1"; }
 ok()      { printf '  \033[32mPASS\033[0m %s\n' "$1"; pass=$((pass+1)); }
 bad()     { printf '  \033[31mFAIL\033[0m %s\n' "$1"; fail=$((fail+1)); }
+skip()    { printf '  \033[33mSKIP\033[0m %s\n' "$1"; skipped=$((skipped+1)); }
+target_is_installed() { rustup target list --installed 2>/dev/null | grep -qx "$1"; }
 
 # ---------- 1) 所有 example 必须能编译 ----------
 section "编译 examples"
@@ -41,7 +44,9 @@ for dir in examples/*/; do
   if [[ -f "$dir/cross-targets" ]]; then
     while read -r tgt; do
       [[ -z "$tgt" || "$tgt" == \#* ]] && continue
-      if tools/evidence.sh "$name" "$tgt" >/tmp/rd-ev-err 2>&1; then
+      if ! target_is_installed "$tgt"; then
+        skip "evidence.sh $name ($tgt 未安装，可按附录 A 安装)"
+      elif tools/evidence.sh "$name" "$tgt" >/tmp/rd-ev-err 2>&1; then
         ok "evidence.sh $name ($tgt)"
       else
         bad "evidence.sh ${name} (${tgt})"
@@ -100,7 +105,7 @@ assert_fn_hit() {
   #    所以匹配 `^_?符号:`；`?` 让调用方既能传 `use_dyn` 也能传 `_use_dyn`。
   body=$(awk -v s="^_?${sym}:" '$0 ~ s {on=1} on {print} on && /cfi_endproc/ {exit}' "$f")
   # ⚠️ 变量引用一律用 ${var}：macOS bash 3.2 会把紧跟的多字节字符（如 `（`）
-  #    当成变量名的一部分，在 set -u 下直接报 unbound variable（见 PLAN §11.3）。
+  #    当成变量名的一部分，在 set -u 下直接报 unbound variable。
   if [[ -z "$body" ]]; then bad "$ex: 找不到符号 ${sym}（见 ${f}）"; return; fi
   if grep -qE "$pat" <<<"$body"; then
     if [[ "$mode" == contains ]]; then ok "$ex: $desc"; else bad "$ex: $desc (unexpected /$pat/ in ${sym})"; fi
@@ -236,7 +241,7 @@ assert_contains ch09-hrtb ".mir" 'Box<dyn for<.a> std::ops::Fn'               "d
 assert_contains ch09-hrtb ".O3.ll" '^@call_elided = .*alias .*ptr @call_boxed_parser' "省略版被折叠成 alias"
 assert_contains ch09-hrtb ".O3.ll" '^@call_explicit = .*alias .*ptr @call_boxed_parser' "显式版被折叠成同一个 alias"
 # 反例
-assert_fails ch09-hrtb "fail/too_weak.rs"            'E0597' "把 'a 提到函数签名 = 量化方向反了"
+assert_fails ch09-hrtb "fail/too_weak.rs"            'E0597' "把 'a 提到函数签名后，F 的 bound 太弱"
 assert_fails ch09-hrtb "fail/no_hrtb_for_visitor.rs" 'E0597' "带生命周期参数的 trait 没有省略简写，必须写 for<'a>"
 assert_fails ch09-hrtb "fail/self_elision.rs"        'lifetime may not live long enough' "HRTB 管的是 F，不是方法自己的签名（&self 抢走输出生命周期）"
 
@@ -275,7 +280,7 @@ assert_fn_not_contains ch11-project-abstract ".O3.s" 'use_dyn' 'br\s+x[0-9]+|blr
 # 反例
 assert_fails ch11-project-abstract "fail/generic_method_kills_dyn.rs" 'E0038' "给 trait 加泛型方法 → dyn 立刻失效"
 assert_fails ch11-project-abstract "fail/conflicting_blanket.rs"      'E0119' "blanket impl 与具体 impl 冲突"
-assert_fails ch11-project-abstract "fail/too_weak_bound.rs"           'E0597' "量化方向反了（该用 for<'a> 时写成了签名上的 'a）"
+assert_fails ch11-project-abstract "fail/too_weak_bound.rs"           'E0597' "生命周期 bound 作用域不对（这里需要 for<'a>）"
 
 # ---- ch17: 实战 —— 并发任务池 ----
 # ★ 任务类型是 `Box<dyn FnOnce() + Send + 'static>`（MIR 里逐字可见）
@@ -332,7 +337,7 @@ assert_contains ch19-pin ".mir" 'get_unchecked_mut' "拿 &mut 必须走 unsafe �
 assert_contains ch19-pin ".mir" 'field _s1: &String'  "★ 跨 await 的借用：状态机里一个字段指向另一个字段（自引用）"
 assert_contains ch19-pin ".mir" 'Suspend0 \(3\): \[_s0, _s1, _s2\]' "Suspend0 变体里同时装着被借者和借用者"
 # ★ 但编译器对所有 async 产物一律保守地标 !Unpin（哪怕没有借用、没有 await）
-assert_fails ch19-pin "fail/future_not_unpin.rs" 'cannot be unpinned' "★ 所有 async fn 的 future 都是 !Unpin（保守，与是否自引用无关）"
+assert_fails ch19-pin "fail/future_not_unpin.rs" 'cannot be unpinned' "★ 当前 async fn future 不自动实现 Unpin（即使没有 await）"
 
 # ---- ch20: async 中的生命周期与 Send 传染 ----
 # ★ 借用跨 await → 状态机里必须留下一个引用字段
@@ -380,7 +385,7 @@ assert_fails ch12-send-sync "fail/guard_not_send.rs" 'MutexGuard.*cannot be sent
 # ---- ch13: Arc 的原子操作 + Mutex 的平台差异 ----
 assert_contains ch13-arc-mutex ".O3.s" 'ldadd'   "Arc::clone 使用 ldadd 原子加"
 assert_contains ch13-arc-mutex ".O3.s" 'dmb'     "Arc drop 路径含内存屏障"
-assert_contains ch13-arc-mutex ".O3.s" 'brk'     "引用计数溢出走 brk #0x1"
+assert_contains ch13-arc-mutex ".O3.s" 'brk'     "引用计数超过软上限后走 brk #0x1"
 assert_contains ch13-arc-mutex ".O3.s" 'pal4unix4sync5mutex' "Mutex 走 pthread 实现（macOS 上不是 futex）"
 assert_contains ch13-arc-mutex ".O3.s" 'Mutex8try_lock'      "try_lock 是非阻塞路径"
 
@@ -408,11 +413,17 @@ assert_contains ch16-atomics ".O3.s" 'casal'         "CAS 生成 casal"
 # Relaxed 读**没有**内存序指令（就是普通 ldr）
 assert_contains ch16-atomics ".O3.s" '^_load_relaxed:' "Relaxed 读的函数存在"
 
-# ---- ch16: 跨架构对照（x86_64，只能看代码不能运行） ----
-assert_contains ch16-atomics ".x86_64.s" 'lock\s+xaddq'     "x86_64 的 SeqCst fetch_add 需要 lock 前缀"
-assert_contains ch16-atomics ".x86_64.s" 'lock\s+cmpxchgq'  "x86_64 的 CAS 需要 lock cmpxchg"
-# x86 的强内存模型：Acquire 读退化成普通 movq（没有额外指令）
-assert_not_contains ch16-atomics ".x86_64.s" 'lfence|mfence|sfence' "x86_64 上这些 Ordering 不需要 fence 指令"
+# ---- ch16: 跨架构对照（x86_64，只生成代码，不运行） ----
+if [[ -z "$filter" || "ch16-atomics" == *"$filter"* ]]; then
+  if target_is_installed x86_64-apple-darwin; then
+    assert_contains ch16-atomics ".x86_64.s" 'lock\s+xaddq'     "x86_64 的 SeqCst fetch_add 需要 lock 前缀"
+    assert_contains ch16-atomics ".x86_64.s" 'lock\s+cmpxchgq'  "x86_64 的 CAS 需要 lock cmpxchg"
+    # x86 的强内存模型：Acquire 读退化成普通 movq（没有额外指令）
+    assert_not_contains ch16-atomics ".x86_64.s" 'lfence|mfence|sfence' "x86_64 上这些 Ordering 不需要 fence 指令"
+  else
+    skip "ch16-atomics: x86_64 对照断言（x86_64-apple-darwin 未安装）"
+  fi
+fi
 
 # ---- ch21: async fn in trait 的现状 ----
 # ★ 泛型调用是单态化：状态机里装着具体类型的状态机
@@ -437,7 +448,7 @@ assert_contains ch24-noalias ".O3.ll" '^@sum_shared = .*alias .*ptr @sum_mut_ro'
 # (4) ★ 两个共享引用都可能别名，却都标 noalias（LangRef: 只约束被修改的内存）
 assert_contains ch24-noalias ".O3.ll" 'define.*@two_shared\(ptr noalias nofree noundef readonly.*ptr noalias nofree noundef readonly' "两个 &u64 参数都标 noalias（且这仍然健全）"
 # (5) ★ noalias 让跨参数 SIMD 成为可能
-assert_contains ch24-noalias ".O3.s"  'add\.2d' "add_all 跨参数向量化（唯一依据是 noalias）"
+assert_contains ch24-noalias ".O3.s"  'add\.2d' "add_all 跨参数向量化（noalias 是重要依据）"
 # (6) ★ 同一段逻辑：安全引用带 noalias，裸指针不带 → 少一次 load
 assert_contains     ch24-noalias ".O3.ll" 'define void @safe_double_add\(ptr noalias' "★ 安全引用参数带 noalias"
 assert_not_contains ch24-noalias ".O3.ll" 'define void @raw_double_add\(ptr noalias'  "★ 裸指针参数不带 noalias"
@@ -449,7 +460,7 @@ assert_fn_contains     ch24-noalias ".O3.s" 'raw_double_add' 'ldr[[:space:]]+w9,
 # ⚠️ 注意断言的确切含义：stable 的 --emit=mir **只会**打印 `no_retag`
 #（Rvalue::Use(_, WithRetag::No) 才打印），它来自 EraseDerefTemps 这类
 # "故意不要 retag" 的 pass，**不是** Stacked Borrows 的 retag 本体。
-# 见 PLAN.md §11.1 的修正说明。
+# `no_retag` 表示这里不做 retag，不能反向当作 retag 发生的证据。
 assert_contains ch25-aliasing ".mir" 'no_retag' "MIR 中出现 no_retag（EraseDerefTemps 产生的非 retag 赋值）"
 # ★ UnsafeCell：唯一合法的"通过共享引用修改"
 assert_contains ch25-aliasing ".O3.s" '^_cell2_roundtrip:' "UnsafeCell 版本可编译（&self 上写）"
@@ -518,5 +529,5 @@ assert_script() {
 assert_script ch08-coherence "cross-crate/run.sh" "跨 crate：下游无法 blanket impl 上游 trait（E0210）"
 
 section "结果"
-printf '  PASS=%d  FAIL=%d\n' "$pass" "$fail"
+printf '  PASS=%d  SKIP=%d  FAIL=%d\n' "$pass" "$skipped" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1

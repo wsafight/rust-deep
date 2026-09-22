@@ -22,7 +22,7 @@ scripts/verify-all.sh ch11       # 10 条断言（PASS=12）
 | 7 | ★ **去虚化**：调用点已知类型时间接跳转消失 | `use_dyn` 函数体内 `br x?\|blr` **0 次** |
 | 8 | 给 trait 加泛型方法 → `dyn` 立刻失效 | `fail/generic_method_kills_dyn.rs` → **E0038** |
 | 9 | blanket impl 与具体 impl 冲突 | `fail/conflicting_blanket.rs` → **E0119** |
-| 10 | 量化方向反了 | `fail/too_weak_bound.rs` → **E0597** |
+| 10 | 生命周期 bound 的作用域不对 | `fail/too_weak_bound.rs` → **E0597** |
 
 ## ★ 核心发现：`dyn` 的代价**只在类型真的未知时**才存在
 
@@ -102,9 +102,9 @@ error[E0038]: the trait `Projection` is not dyn compatible
 
 ★ **关联类型不破坏 dyn compatibility，泛型方法才破坏。**
 这是"关联类型还是泛型参数"这个选择的一个**隐藏权重**——
-第 6 章只讲了"一个类型实现几次"，这里补上"会不会毁掉 `dyn`"。
+第 6 章只讲了"一个类型实现几次"，这里补上"当前接口还能不能 `dyn`"。
 
-### 牵制二：要"一族 key" → 要么 GAT，要么毁掉 `dyn`
+### 牵制二：要"一族 key" → 使用 GAT 后要重新检查 dyn compatibility
 
 ```rust
 pub trait KeyedProjection {
@@ -113,7 +113,7 @@ pub trait KeyedProjection {
 }
 ```
 
-GAT **本身**就足以让 trait 失去 dyn compatibility
+本章这个对 dyn 暴露 GAT 的接口会失去 dyn compatibility
 （第 10 章的 E0038：`because it contains generic associated type Out`）。
 
 所以这个设计里的 `KeyedProjection` **只能是静态分发的**。

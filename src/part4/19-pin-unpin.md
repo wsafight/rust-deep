@@ -3,7 +3,33 @@
 > 一句话：`Pin` 不是"防止值被移动"的魔法，而是**一个权限收缩装置**——
 > 它把"移动一个值"所需要的两把钥匙（**所有权**和 **`&mut`**）收走，
 > 于是"不能移动"从一条**文档约定**变成了**类型约束**。
-> 而它存在的唯一理由，是 `async` 状态机可能是**自引用**的。
+> 它服务于一类共同需求：值一旦进入地址敏感状态，就不能再被安全移动；
+> 自引用的 `async` 状态机是最重要的应用之一。
+
+## 先把语法认清
+
+`Pin<&mut T>` 或 `Pin<Box<T>>` 表示从安全代码不能再移动被指向的 `T`。
+若 `T: Unpin`，这个限制可以安全解除；`!Unpin` 类型则只能通过保证不移动
+字段的投影 API 修改。Pin 保证的是位置稳定性，不是只读，也不是对象地址永远
+不会被底层 unsafe 代码破坏。
+
+仍然用搬运来记：`Pin<Box<T>>` 固定的是**货物**，不是装着地址的**提货单**。
+提货单可以移动，货物一旦进入地址敏感状态就必须留在原位。
+
+### 放到业务里：等待中的 IO Future
+
+网络驱动把 future 注册到事件循环后，future 内部可能保存指向自身缓冲区或
+状态字段的指针。executor 可以移动 `Pin<Box<Future>>` 这个句柄，却不能移动
+堆上的 future 本体。业务层通常只会看到 `Box::pin` 或宏生成的投影代码，
+但理解 Pin 能解释为什么某些 future 不能直接借成 `&mut T`。
+
+```rust
+let request = Box::pin(read_response(socket));
+queue.push(request); // 队列移动的是 Pin<Box<_>>，不是 future 本体
+```
+
+这也是为什么“Pin 以后还能不能 move”必须先问清移动的是哪一层：句柄可以走，
+被钉住的值不能被安全代码从原位置搬走。
 
 第 4 章讲过 `Pin` 是什么（零成本、`Unpin` 是 auto trait、`PhantomPinned` 是开关）。
 这一章回答**为什么它必须存在**：我们会真的构造一个自引用结构，
@@ -27,7 +53,7 @@ pub async fn borrow_across_await() -> u64 {
 一个字段（`&String`）指向另一个字段（`String`）** ——
 也就是它**指向自己**。
 
-而 Rust 的移动是 memcpy（第 4 章）：状态机被搬到别处时，
+而 Rust 的移动允许重定位（第 4 章）：状态机被搬到别处时，
 那个内部指针还指着**旧地址**。
 
 于是你遇到本章的两类"卡住"：
@@ -66,14 +92,15 @@ error[E0277]: `{async fn body of borrow_across_await()}` cannot be unpinned
 > **如果自引用是 UB，那 `async` 是怎么活下来的？**
 > 标准库难道不该有一个 `unsafe` 的漏洞吗？
 
-## 19.1 表层解释（官方书会怎么讲）
+## 19.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - `Pin<P>` 保证被指向的值不会被移动；
 - `Unpin` 表示"移动这个类型是安全的"，大部分类型都是 `Unpin`；
 - `async` 生成的状态机是 `!Unpin`，所以要 `Box::pin`；
-- 自引用指针必须从 `&mut` 派生，不能从 `&` 派生。
+- 自引用指针的创建方式必须与后续访问相容；若后续还要通过独占路径写入，
+  不能继续使用此前从共享引用派生、且已被该写入作废的指针。
 
 前三条第 4 章讲过。**最后一条**才是本章的正题 ——
 它是 `Pin` 的 soundness 边界，而它**在代码里完全看不出来**。
@@ -91,12 +118,13 @@ pub struct SelfRef {
     _pin: PhantomPinned,    // 让它 !Unpin
 }
 
-pub fn make_self_ref(data: u64) -> Pin<Box<SelfRef>> {
-    let mut b = Box::pin(SelfRef { data: 0, self_ref: std::ptr::null_mut(), _pin: PhantomPinned });
-    let this: &mut SelfRef = unsafe { b.as_mut().get_unchecked_mut() };
-    this.data = data;
-    this.self_ref = std::ptr::addr_of_mut!(this.data);   // ← 自引用指针
-    b
+impl SelfRef {
+    pub fn new(data: u64) -> Pin<Box<SelfRef>> {
+        let mut b = Box::pin(SelfRef { data, self_ref: std::ptr::null_mut(), _pin: PhantomPinned });
+        let this: &mut SelfRef = unsafe { b.as_mut().get_unchecked_mut() };
+        this.self_ref = std::ptr::addr_of_mut!(this.data);
+        b
+    }
 }
 ```
 
@@ -174,7 +202,7 @@ coroutine layout {
 
 ★ **`_s1: &String` 就是 19.2.1 里那个 `self_ref`。**
 
-第 18 章说"状态机是每个 `await` 一个变体"；这里看到的是**同一件事的另一面**：
+第 18 章展示了挂起点如何进入状态机布局；这里看到的是**同一件事的另一面**：
 `Suspend0` 变体里同时装着 `_s0`（`String`）和 `_s1`（`&String`）——
 一个指向另一个。**这就是编译器必须保守的原因**（19.4 展开）。
 
@@ -337,13 +365,10 @@ error[E0277]: `{async fn body of zero_await()}` cannot be unpinned
 
 **一个不可能自引用的状态机，也被判定为 `!Unpin`。**
 
-为什么？因为这里有一个**时序上的死结**：
-
-- "这个状态机有没有自引用"要等**借用检查之后**才知道；
-- 而 `Unpin` 是 **auto trait**，它的答案必须在**类型层立即给出**。
-
-编译器没法等，于是选择**一律保守**：
-1.98.1 上，编译器生成的 `async` 产物**全部**是 `!Unpin`。
+这是当前编译器对匿名 async 状态机采取的保守语义：
+1.98.1 上，编译器生成的 `async` 产物不会自动实现 `Unpin`，
+即使具体函数没有形成自引用。不要把这个观察解释成借用检查与 auto trait
+推导之间必然存在某种"时序死结"；对读者可靠的结论是 API 行为本身。
 
 **代价**就是你到处要写 `Box::pin` / `pin!`；
 **收益**是"自引用 future 一定安全"这件事**不需要任何额外规则**——
@@ -353,7 +378,7 @@ error[E0277]: `{async fn body of zero_await()}` cannot be unpinned
 > 所以 `Pin::new(&mut ready)` 可以编译。
 > **`!Unpin` 不是 `async` 的关键字，而是"编译器生成的状态机"的性质。**
 
-### 反直觉之二：`addr_of!` 和 `addr_of_mut!` 生成**同样的汇编**，一个是 sound 的，一个是 UB
+### 反直觉之二：同样的机器码可能对应不同的别名有效性
 
 这是本章最值得记住的一条。
 
@@ -365,7 +390,7 @@ this.self_ref = std::ptr::addr_of_mut!(this.data);  // B
 ```
 
 **两者的汇编完全一样**（都是取 `this + 0` 的地址，没有别的指令）。
-但 Miri 给出相反判定：
+在本章构造并随后改写字段的访问序列中，Miri 给出相反判定：
 
 | 写法 | Miri（Stacked Borrows） |
 |---|---|
@@ -378,21 +403,21 @@ this.self_ref = std::ptr::addr_of_mut!(this.data);  // B
   之后任何一次对 `data` 的写入都会把它**弹掉**（共享借用不允许写入者）；
 - `addr_of_mut!(place)` 派生的是 **Unique** 权限 —— 写入不会作废它。
 
-一个自引用结构**必然**要在构造时写 `data`、之后再写 `self_ref`，
-所以只有 B 是 sound 的。
+本章实现会在建立自引用前后使用独占路径初始化字段，因此必须保证保存下来的
+指针没有被这些写入作废；B 与这段具体访问序列相容。`addr_of!` 本身并不
+普遍制造 UB，关键是指针来源与后续访问的组合。
 
 ★ **这就是 `unsafe` 的本质**（第 24 章）：
 
 > 代码里**没有**任何一处写着"这个指针的权限是什么"。
-> 两个逐字节等价的写法，编译器生成同样的机器码，
-> 而其中一个是健全的、另一个是 UB。
+> 两段最终机器码可以逐字节等价，但其中一段源码的访问历史违反别名模型。
 > **这份契约只存在于你脑子里——所以它必须写进 `SAFETY` 注释，并由 Miri 检查。**
 
 同一类陷阱还有第二种（`fail` 之外的运行期演示，见 `tests/selfref_ub.rs`）：
 **把值搬到另一个地址，然后释放旧地址**。Miri 报
 `memory access failed: alloc<N> has been freed, so this pointer is dangling`。
 
-> 附带一条实测结论：**"移动 = memcpy"不必然当场暴露。**
+> 附带一条实测结论：**移动后的地址问题不必然当场暴露。**
 > 如果旧地址还活着（比如只是栈上又复制了一份），Miri 可能不报错 ——
 > 它只在旧地址**真的失效**时才判定悬垂。
 > 这正是自引用结构最危险的地方：**它可能"碰巧能跑"，然后在某次重构后爆炸。**
@@ -495,8 +520,8 @@ this.self_ref = std::ptr::addr_of_mut!(this.data);
 2. **让自引用指针从 `&mut` 派生**（`addr_of_mut!`，而不是 `addr_of!`）
    —— 这是 Stacked Borrows 的约定（19.4 反直觉之二）。
 
-第 2 条**完全不会**被编译器检查，也不会在汇编里留下任何痕迹。
-它只被一样东西检查：**Miri**。
+第 2 条不会由借用检查器完整证明，也不会在汇编里留下直接痕迹。
+Miri 可以在执行具体测试路径时检查这类别名错误。
 
 ```bash
 cargo +nightly miri test -p ch19-pin --test selfref      # 必须通过
@@ -505,7 +530,7 @@ cargo +nightly miri test -p ch19-pin --test selfref_ub   # 必须失败
 
 > **这是本书里"`unsafe` 的代价"最具体的一次呈现**：
 > 你写下的每一个 `unsafe`，都同时购买了一张**别人看不见的**义务清单。
-> Miri 是唯一能替你检查其中一部分的工具 —— 而它只覆盖 Miri 能理解的那些规则
+> Miri 是检查其中一部分问题的重要工具 —— 而它只覆盖 Miri 能理解的那些规则
 > （Stacked Borrows 目前仍是**实验性**的，规则本身还在改）。
 
 这也解释了为什么标准库把 `Pin` 做得这么小：**每一条 API 都是要背义务的**。
@@ -517,18 +542,19 @@ cargo +nightly miri test -p ch19-pin --test selfref_ub   # 必须失败
   把自己的地址写进自己。没有运行时登记，没有魔法。
 - **`async` 状态机真的会自引用**：MIR 的 `coroutine layout` 里
   `field _s0: String` 和 `field _s1: &String` 同时活在 `Suspend0` 变体里。
-  这就是 `Pin` 存在的**唯一理由**。
+  这就是 `Pin` 最核心的用途：维护地址敏感值的不移动不变量。
 - **`Pin` 靠收缩权限来表达"不能移动"**：拿走所有权（`E0507`）
   和 `&mut`（`E0596`）。错误信息说的是"cannot borrow as mutable"，
   而不是"这个类型不能移动"。
 - **`Pin` 本身零成本**：`@plain = ... alias ... ptr @pinned`，
   汇编里是同一个符号。有开销的是 `Box::pin`（一次堆分配，换地址稳定）。
-- **所有 `async` 产物都是 `!Unpin`**，连没有 `await` 的 `async fn` 也是 ——
-  因为 `Unpin` 是 auto trait，必须在类型层立即给出答案，
-  而"有没有自引用"要等借用检查之后才知道。编译器选择一律保守。
+- **当前编译器生成的 `async` 产物不会自动实现 `Unpin`**，
+  连没有 `await` 的 `async fn` 也是。应依赖这个可观察的 API 行为，
+  不把它归因于未经本章证实的编译器 pass 时序。
 - **★ 最反直觉的一条**：`addr_of!` 与 `addr_of_mut!` 生成**同样的汇编**，
   但前者在写入后会失效（SharedReadOnly），后者不会（Unique）。
-  一个是 sound 的，一个是 UB —— **只有 Miri 能分辨**。
+  在本章这组后续写入中，一个指针仍有效、另一个已失效；Miri 能观察
+  这种机器码中不存在的访问历史。
 - **`Pin` 不保证值不被移动，只保证你拿不到移动它的手段**；
   **`!Unpin` 也不等于危险**，只是"移动需要额外证明"——
   与第 12 章的 `!Send` / `!Sync` 同一种语气。

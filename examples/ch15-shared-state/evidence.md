@@ -39,7 +39,7 @@ LBB38_2:
 LBB42_1:
 	subs	x20, x20, #1        ; 循环计数
 	b.eq	LBB42_16
-	ldapr	x0, [x21]           ; ★ Mutex 的 fast path：一次 acquire 读
+	ldapr	x0, [x21]           ; ★ pthread Mutex 的 OnceBox 初始化状态
 	cbz	x0, LBB42_9
 LBB42_3:
 	bl	__RNv...pal4unix4sync5mutexNtB2_5Mutex4lock    ; ★ 函数调用
@@ -70,7 +70,7 @@ LBB42_7:
 
 从上面的循环体能直接读出 `Mutex` 提供的**全套服务**：
 
-1. `ldapr` + `cbz` —— fast path 尝试（无竞争时直接拿到锁）；
+1. `ldapr` + `cbz` —— pthread Mutex 包装层的懒初始化检查；
 2. `bl ...Mutex4lock` —— 函数调用（可能有竞争 → 进 pthread 阻塞）；
 3. `GLOBAL_PANIC_COUNT` 的读 + `tst` + 分支 —— **poison 检查**；
 4. poison 标志位检查（`ldrb` + `cbnz`）；
@@ -104,7 +104,7 @@ done
 这些函数做的工作量不同（有的只算一次累加，有的创建线程并 join）。
 **有意义的是上面那个"循环体"对照**（同样的工作，4 条 vs 11 条）。
 
-> 本书在没有 benchmark 数据之前不写"哪个更快"（见 PLAN §13 断点 6）。
+> 本书没有接入对应 benchmark，因此这里只比较结构和生成代码。
 > 这里只说"哪个做了更多事"。
 
 ## 反例：`fail/rc_refcell_thread.rs`

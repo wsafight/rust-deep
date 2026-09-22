@@ -7,7 +7,7 @@
 
 | 层 | 工具 | 承担什么 | 命令 |
 |---|---|---|---|
-| **主** | **Miri** | Stacked Borrows 的**真实执行语义** | `scripts/verify-miri.sh`（7 条） |
+| **主** | **Miri** | 按当前 Stacked Borrows 模型检查具体路径 | `scripts/verify-miri.sh` |
 | 辅 | LLVM IR | 契约（`noalias` / `captures`） | `ch24-noalias` |
 | 澄清 | MIR | 只用来**破除误解**：`no_retag` 不是 retag | `verify-all.sh ch25`（5 条） |
 
@@ -115,21 +115,22 @@ error: Undefined Behavior: trying to retag from <N> for SharedReadOnly permissio
 ★ **`UnsafeCell` 让"那次写入"合法，但这次写入仍然会弹掉在此之前建立的 `&T`。**
 **实践规则：不要在写入之前建立 `&T` 并持有到写入之后。**
 
-## ★ 核心证据三：`PhantomData` 让裸指针携带权限
+## ★ 核心证据三：`PhantomData` 补回静态类型关系
 
 ```rust
 pub struct SharedReadOnly<'a, T> {
     ptr: *const T,
-    _p: PhantomData<&'a T>,                  // 只读
+    _p: PhantomData<&'a T>,                  // 类型层面借用 T
 }
 pub struct SharedReadWrite<'a, T> {
     ptr: *mut T,
-    _p: PhantomData<&'a UnsafeCell<T>>,      // 可写
+    _p: PhantomData<&'a UnsafeCell<T>>,      // 类型层面借用 UnsafeCell<T>
 }
 ```
 
-**两个结构体的字段布局完全一样**（8 字节指针 + ZST），
-区别只在 `PhantomData` 的**类型参数**。
+**两个结构体的字段布局完全一样**（8 字节指针 + ZST）。
+它们的 Miri 权限差异来自真实指针分别由 `&T` 和 `UnsafeCell::get()` 创建，
+不是 `PhantomData` 给裸指针附加了 tag。
 
 `PhantomData` 是零大小的，但让类型参与三件事：
 
@@ -139,8 +140,9 @@ pub struct SharedReadWrite<'a, T> {
 | auto trait 推导 | `PhantomData<*const T>` 让类型 `!Send` | 12 |
 | variance | `PhantomData<&'a T>` 协变 | 3 |
 
-★ **`PhantomData` 在 `unsafe` 代码里几乎总是必须的，不是可选的** ——
-裸指针丢掉了上面三样东西，它是唯一的补法。
+★ 当外层类型在逻辑上拥有或借用 `T`、而字段无法表达该关系时，
+`PhantomData` 用来补充生命周期、drop check、auto trait 和 variance；
+它是否需要以及写成什么类型，取决于真实 API 语义。
 
 ## ★ 核心证据四：`no_retag` 的样子（只用来说明误解）
 
@@ -167,7 +169,7 @@ $ grep no_retag .evidence/ch25-aliasing-lib.mir
 | `ch25-aliasing/sb_ub` | 必须**报 UB** | 2 |
 | `ch25-aliasing/aliasing` | 必须**通过** | 8 |
 | `ch25-aliasing/aliasing_ub` | 必须**报 UB** | 4 |
-| `ch19-pin/selfref` | 必须**通过** | 4 |
+| `ch19-pin/selfref` | 必须**通过** | 5 |
 | `ch19-pin/selfref_ub` | 必须**报 UB** | 2 |
 
 ### 四个 UB 用例（`aliasing_ub.rs`）
@@ -202,7 +204,7 @@ $ grep no_retag .evidence/ch25-aliasing-lib.mir
 
 | 情形 | 结论 |
 |---|---|
-| Miri 报 UB | **几乎肯定有问题**，值得认真查 |
+| Miri 报 UB | 违反当前所选模型，应结合语言规则与 API 契约核查 |
 | Miri 不报 | **不能**反推"代码一定 sound" |
 | 文档里 | **不要**把"Miri 通过"写成 soundness 证明 |
 

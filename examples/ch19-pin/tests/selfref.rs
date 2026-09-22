@@ -1,15 +1,11 @@
 //! 自引用结构：**合法版本**。
 //!
-//! 普通 `cargo test` 与 `cargo +nightly miri test` 都必须通过。
-//!
-//! `#![cfg(miri)]` 让这个文件只在 Miri 下存在 —— 不是因为它不合法，
-//! 而是因为"通过 Stacked Borrows 检查"这件事只有 Miri 能证明。
+//! 普通 `cargo test` 与 `cargo +nightly miri test` 都必须通过。普通测试用于
+//! 回归功能与地址稳定性；Miri 额外检查当前模型能够发现的 UB。
 //!
 //! 复现：
 //!   cargo +nightly miri test -p ch19-pin --test selfref      # 必须通过
 //!   cargo +nightly miri test -p ch19-pin --test selfref_ub   # 必须失败
-
-#![cfg(miri)]
 
 use ch19_pin::{make_self_ref, read_self_ref, SelfRef};
 
@@ -21,6 +17,17 @@ use ch19_pin::{make_self_ref, read_self_ref, SelfRef};
 fn self_ref_is_correct() {
     let p = make_self_ref(7);
     assert_eq!(read_self_ref(&p), 7);
+}
+
+/// 公共构造器必须让自引用指向返回对象本身，而不是某个临时对象。
+#[test]
+fn public_constructor_points_into_returned_value() {
+    let p = SelfRef::new(11);
+    assert_eq!(p.read_via_self_ref(), 11);
+
+    // 移动的是 Pin<Box<_>> 这个句柄，堆上的 SelfRef 地址保持不变。
+    let q = p;
+    assert_eq!(q.read_via_self_ref(), 11);
 }
 
 /// 钉住之后**改字段**是允许的（改的不是被自引用指着的那块，或者

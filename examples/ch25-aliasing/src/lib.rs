@@ -77,10 +77,10 @@ pub fn mut_roundtrip(v: u64) -> u64 {
 }
 
 // ============================================================
-// 2) PhantomData：让裸指针"携带"它该有的权限
+// 2) PhantomData：补回类型系统看不见的借用关系
 // ============================================================
 
-/// ★ `PhantomData<&'a T>`：这个结构体里的裸指针**在语义上是 `&'a T`**。
+/// ★ `PhantomData<&'a T>`：让外层类型在静态检查中表现得像借用了 `&'a T`。
 ///
 /// `PhantomData` 是零大小的，但它让类型**参与**三件事：
 ///
@@ -88,11 +88,11 @@ pub fn mut_roundtrip(v: u64) -> u64 {
 /// 2. **auto trait 推导**（第 12 章：`PhantomData<*const T>` 让类型 `!Send`）；
 /// 3. **variance**（第 3 章：`PhantomData<&'a T>` 是协变的）。
 ///
-/// ★ 第 3 条在本章最重要：它让 Miri 知道这个指针**是只读的**
-/// —— 于是"先从这里读、再从别处写、再回来读"会被判 UB。
+/// ⚠️ 它不会给 `ptr` 制造 Miri 权限。`ptr` 的 provenance/tag 来自
+/// `new` 收到的真实 `&'a T`；Miri 按这个来源和后续访问判断是否合法。
 pub struct SharedReadOnly<'a, T> {
     ptr: *const T,
-    _p: PhantomData<&'a T>,     // ← 零大小，但携带"这是 &'a T"这个事实
+    _p: PhantomData<&'a T>,     // ← 零大小，表达外层类型借用了 &'a T
 }
 
 impl<'a, T: Copy> SharedReadOnly<'a, T> {
@@ -106,12 +106,12 @@ impl<'a, T: Copy> SharedReadOnly<'a, T> {
 
 /// 对照：`PhantomData<&'a UnsafeCell<T>>` —— 这个指针**允许被写**。
 ///
-/// 两个结构体的字段布局**完全一样**（都是 8 字节指针 + ZST），
-/// 区别只在 `PhantomData` 的**类型参数**。但 Miri 对它们的判定不同：
-/// `SharedReadOnly` 派生的指针会被写入作废，`SharedReadWrite` 的不会。
+/// 两个结构体的字段布局**完全一样**（都是 8 字节指针 + ZST）。
+/// 二者的动态访问权限不同，是因为真实指针分别来自 `&T` 和
+/// `UnsafeCell::get()`，不是因为 `PhantomData` 改写了指针的权限。
 ///
-/// ★ 这就是 `PhantomData` 的用途：**把"这个裸指针的权限"写进类型里**，
-/// 让编译器（和 Miri）知道该按哪套规则检查。
+/// ★ `PhantomData` 在这里负责生命周期、variance、drop check 和 auto trait
+/// 等静态关系；Miri 仍按 `ptr` 的实际来源与访问历史检查。
 pub struct SharedReadWrite<'a, T> {
     ptr: *mut T,
     _p: PhantomData<&'a UnsafeCell<T>>,

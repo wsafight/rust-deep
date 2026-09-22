@@ -1,10 +1,40 @@
 # 16. 无锁与 atomics 入门
 
-> 一句话：**内存序不是抽象概念，它决定生成哪条指令。**
+> 一句话：内存序既约束编译器重排，也要由目标硬件兑现；
+> 在很多小函数里，这种差异可以直接落到不同指令上。
 > AArch64 有独立的内存序指令（`ldar` / `ldapr` / `stlr` / `ldaddal`），
-> 所以不同的 `Ordering` 生成**不同的指令**；
+> 所以本章选取的不同 `Ordering` 会生成不同指令；
 > 而 x86 的强内存模型下，大部分 `Ordering` 会退化成同一条 `mov`
-> —— 这是全书唯一一处"同一份 Rust 代码、两种 ISA、肉眼可见的差异"。
+> —— 这是观察“同一份 Rust 代码如何映射到不同 ISA”的代表性案例。
+
+## 先把语法认清
+
+原子类型通过 `load`、`store`、`fetch_add`、`compare_exchange` 等方法修改
+共享整数或布尔值。`Ordering` 不决定操作是否原子，而是约束该操作与前后
+其他内存访问之间的顺序：`Relaxed` 只关心原子值本身，Release/Acquire
+用于发布与观察数据，`SeqCst` 额外要求所有 SeqCst 操作进入一致总序。
+
+原子操作保证的是**这一笔账不会撕成两半**；内存序回答的是：看见这笔账时，
+能不能顺带相信旁边几本账也已经更新。两个问题很像，却不能混着答。
+
+### 放到业务里：配置发布与服务停机
+
+纯取消标志只传递一个布尔值时可用 `Relaxed`；若控制线程先写入新配置，
+再把 `READY` 置位，worker 看到 READY 后还要读取那份配置，就需要
+Release/Acquire 建立 happens-before。两者代码看起来只差一个枚举值，
+承诺的却是完全不同的数据可见关系。
+
+```rust
+DATA.store(new_version, Ordering::Relaxed);
+READY.store(true, Ordering::Release);
+
+if READY.load(Ordering::Acquire) {
+    apply(DATA.load(Ordering::Relaxed));
+}
+```
+
+Acquire 不是让 `READY`“读得更新”，而是让读到这次发布的线程也能据此
+观察发布之前的写；这正是业务语义从“一个标志”升级为“发布一批数据”的地方。
 
 ## 16.0 一个会让你卡住的例子
 
@@ -24,10 +54,30 @@ while !STOP.load(Ordering::Relaxed) {
 STOP.store(true, Ordering::Relaxed);
 ```
 
-**这段代码能编译，但可能永远停不下来。**
+**如果这个原子变量只表达"是否停止"，这段代码通常就是正确的。**
+`Relaxed` 保证每次 load/store 都是原子操作，并参与 `STOP` 自己的修改顺序；
+编译器不能把循环里的原子 load 当作普通不变量，只在循环外读取一次。
 
-问题不在"原子性"（`Relaxed` 也是原子的，不会读到撕裂的值），
-而在**可见性**：线程 A 可能永远看不到线程 B 写的那次 `true`。
+但 `Relaxed` **不能发布其他内存**。如果线程 B 还要先写一份数据，线程 A
+看到标志后再读取它，就需要建立同步关系：
+
+```rust
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+static DATA: AtomicU64 = AtomicU64::new(0);
+static READY: AtomicBool = AtomicBool::new(false);
+
+// 线程 B：先写数据，再发布 ready
+DATA.store(42, Ordering::Relaxed);
+READY.store(true, Ordering::Release);
+
+// 线程 A：读到这次 Release 写入后，才能据此观察它之前的写
+while !READY.load(Ordering::Acquire) {}
+assert_eq!(DATA.load(Ordering::Relaxed), 42);
+```
+
+`Acquire`/`Release` 解决的是**其他内存操作的先后关系**，不是
+"让某个值最终一定被看到"的调度或活性保证。
 
 你会想："那就用 `SeqCst` 吧，最强的那个。" —— 那 **`Relaxed` 是用来干嘛的？**
 如果所有地方都写 `SeqCst`，会不会有问题？
@@ -35,13 +85,13 @@ STOP.store(true, Ordering::Relaxed);
 **这一章要回答的是"每一种 `Ordering` 到底在保证什么"** ——
 而且答案会具体到**指令**。
 
-## 16.1 表层解释（官方书会怎么讲）
+## 16.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - `Relaxed`：只保证原子性，不保证顺序；
-- `Acquire` / `Release`：成对使用，`Release` 写在前面、`Acquire` 读在后面，
-  就能建立 happens-before 关系；
+- `Acquire` / `Release`：当 acquire 读观察到 release 写入的值（或相应的
+  release sequence）时，建立 happens-before 关系；
 - `SeqCst`：所有线程看到一致的全序，最贵但最直观；
 - 经验法则：**先用 `SeqCst`，测出瓶颈再放松**。
 
@@ -52,7 +102,7 @@ STOP.store(true, Ordering::Relaxed);
 
 ## 16.2 编译器眼里的样子
 
-### 16.2.1 每个 `Ordering` 生成不同的指令（AArch64）
+### 16.2.1 本章选取的 `Ordering` 在 AArch64 上体现为不同指令
 
 实测（`.evidence/ch16-atomics-lib.O3.s`）：
 
@@ -161,13 +211,15 @@ _compare_exchange:
 实测佐证：`grep -cE 'lfence|mfence|sfence'` 在 x86_64 产物里命中 **0 次**
 —— 这些函数**一条 fence 都不需要**。
 
-> ★ **所以"`SeqCst` 比 `Relaxed` 贵"这句话在 x86 上是错的**
-> （对 load/store 而言，两者生成同一条 `movq`）。
+> ★ **所以不能笼统地说"`SeqCst` 一定比 `Relaxed` 多一条指令"。**
+> 本章的三个 load 以及 Relaxed/Release store 生成相同的 `movq`；但这里
+> **没有测试 SeqCst store**，后者在 x86 上通常需要 `xchg` 等更强实现。
 > **内存序的代价是架构相关的** —— 这正是不该凭直觉猜的地方。
 
-**(2) RMW（读-改-写）在任何架构上都必须显式同步。**
+**(2) RMW（读-改-写）必须由原子机器操作或等价的原子指令序列实现。**
 `fetch_add` / `compare_exchange` 在 x86 上都需要 `lock` 前缀
-（`lock xaddq` / `lock cmpxchgq`），在 AArch64 上需要 `ldaddal` / `casal`。
+（`lock xaddq` / `lock cmpxchgq`）；在这份 AArch64 产物中，
+Relaxed RMW 是 `ldadd`，SeqCst RMW 是 `ldaddal` / `casal`。
 
 **这是两个架构唯一"看起来一致"的地方。**
 
@@ -194,8 +246,8 @@ ch16: ldadd    ← fetch_add(Relaxed)
 一个从 `fetch_add` 的不同 `Ordering` 读出来。
 
 ★ 这是一个绝好的教学点：同一个 `Arc`，**clone 用 `Relaxed`、
-drop 时才用 `Release` + `dmb ishld`**。为什么够用？
-因为"引用计数的增减"本身不需要顺序，**只有"最后一次 drop"才需要** ——
+drop 的递减用 `Release`，最后一个持有者再执行 acquire fence**。为什么够用？
+因为"增加引用计数"本身不发布 payload，**真正销毁对象前才需要同步** ——
 它必须看到之前所有的写。这就是 `Arc` 的健全性论证的核心（第 13 章）。
 
 ## 16.3 为什么必须这样设计
@@ -224,11 +276,12 @@ AArch64 是**弱内存模型**（weak memory model）：
 - **原子性**：读到的值不会撕裂（不会读到"半个 `u64`"）；
 - **内存序**：这个操作和其他内存操作的**可见顺序**。
 
-`Relaxed` 保证前者、不保证后者。
+`Relaxed` 保证前者以及该原子对象自身的修改顺序，但不为周围的普通内存访问
+建立 happens-before 关系。
 
-**什么场景只需要原子性？** 计数。比如：
+**什么场景只需要原子值本身？** 例如：
 
-- `Arc` 的引用计数（第 13 章）；
+- `Arc::clone` 的引用计数递增（第 13 章；销毁路径另有 Release/Acquire）；
 - 统计用的计数器（`metrics.hits.fetch_add(1, Relaxed)`）；
 - "这个值是多少"本身就够用的场景（不需要和其他内存建立关系）。
 
@@ -244,14 +297,15 @@ AArch64 是**弱内存模型**（weak memory model）：
 "我看到了你的 release，所以我看到了你 release 之前的所有写"。
 一旦有多个变量、多个线程，推理就变得容易出错。
 
-> 这就是那句经验法则的来源：**先用 `SeqCst`，测出瓶颈再放松**。
-> 但本章的实测告诉你一个补充：**在 x86 上"放松"可能一分钱都不省**
-> （load/store 本来就一样，RMW 也一样贵）。
+> 对不熟悉内存模型的代码，**先用 `SeqCst` 建立一个容易审查的正确版本**
+> 是可取的起点；放松前必须重新给出正确性论证。
+> 但本章的实测告诉你一个补充：**在 x86 上，某些放松不会改变机器码**
+> （本章的 load、Relaxed/Release store 和 `fetch_add` 对照如此）。
 > **放松内存序的收益是架构相关的。**
 
 ## 16.4 反直觉的点
 
-### 反直觉之一：`SeqCst` 在 x86 上不比 `Relaxed` 贵
+### 反直觉之一：x86 上多组 Ordering 会生成相同指令
 
 | 操作 | AArch64 | x86_64 |
 |---|---|---|
@@ -259,7 +313,8 @@ AArch64 是**弱内存模型**（weak memory model）：
 | `store(Relaxed)` → `store(Release)` | `str` → `stlr`（**更贵**） | `movq` → `movq`（**一样**） |
 | `fetch_add(Relaxed)` → `fetch_add(SeqCst)` | `ldadd` → `ldaddal`（**更贵**） | `lock xaddq` → `lock xaddq`（**一样**） |
 
-**在 x86 上，放松内存序几乎什么都省不下来。**
+这张表只覆盖本章列出的操作。尤其不能从 Relaxed/Release store 的对照
+推出 SeqCst store 也相同；后者通常需要 `xchg` 或等价的更强实现。
 
 反过来说：**AArch64 才是那个"放松内存序有收益"的架构**
 （这也是为什么 ARM 服务器上这类优化更受关注）。
@@ -274,21 +329,20 @@ AArch64 是**弱内存模型**（weak memory model）：
 
 因为 x86 的 `lock` 前缀本身就提供全序 —— 没有"更弱的原子 RMW"这种东西。
 
-**所以在 x86 上，对一个 RMW 放松内存序是纯浪费表达力**（省不到性能）。
-但在 AArch64 上，`ldadd` 确实比 `ldaddal` 简单。
+在这个孤立 `fetch_add` 样本里，放松内存序没有改变 x86 机器码。
+但 Ordering 还约束编译器重排，不能仅凭这一段汇编把更弱排序称作
+"纯浪费"。在 AArch64 样本里，`ldadd` 与 `ldaddal` 确实不同。
 
-### 反直觉之三：`Relaxed` 不是"随便用"的同义词
+### 反直觉之三：停止标志可以是 `Relaxed`，发布数据不可以
 
-16.0 那个停止标志用 `Relaxed` 就是 bug —— 而且**可能永远不退出**。
+16.0 的纯停止标志只传递一个原子布尔值，`Relaxed` 足够表达这个需求。
+原子 load 仍然是一次可观察的原子操作，不能被提升到循环外。
 
-`Relaxed` 保证的是"值不会撕裂"，**不保证"你能看到它"**。
-循环里的 `load(Relaxed)` 甚至可能被优化成**只读一次**（因为编译器
-认为没有别的东西会改它 —— 它看不到另一个线程的写）。
+如果标志还承担"看到我就可以读取此前初始化的数据"的职责，情况就不同了：
+发布方要用 `Release`，观察方要用 `Acquire`，并且 acquire load 必须读到
+对应 release 写入的值，才能把之前的数据写同步过来。
 
-正确的写法是 `Acquire`（读）/ `Release`（写）。
-
-> **`Relaxed` 的适用范围很窄**：只用在"这个值本身是全部信息"的地方。
-> 一旦它需要"顺带告诉你别的事"，就必须升级。
+> 判据不是"这个变量是否重要"，而是：**它是否还在发布其他内存。**
 
 ### 反直觉之四：CAS 的返回值需要两条指令
 
@@ -365,13 +419,14 @@ scripts/verify-all.sh ch16      # 9 条断言
 
 ## 16.6 与 unsafe 的关系
 
-**`Ordering` 是 `unsafe` 里最容易撒谎的地方** —— 而且撒谎的方式很特别：
-**代码不会崩，只会偶尔给出错误结果。**
+**`Ordering` 是手写并发算法里最容易写错的地方之一**。原子 API 本身是
+安全 API，但错误的排序可能破坏算法不变量；如果算法还借助 `unsafe` 访问
+普通内存，后果甚至可能升级成数据竞争和 UB。
 
-★ `Relaxed` 用错了，症状是"在某些机器上、某些负载下、偶尔出错"。
+★ 内存序用错时，症状常常是"在某些机器上、某些负载下、偶尔出错"。
 这是最难调试的一类 bug。所以有三条纪律：
 
-1. **先用 `SeqCst`**。它的语义最容易推理，代价在大多数场景下可接受
+1. **不确定时先用 `SeqCst`**。它的语义最容易推理，代价在大多数场景下可接受
    （尤其在 x86 上，实测几乎为零）；
 2. **放松时必须写下论证**：为什么这个操作不需要看到别的内存？
    论证要写在注释里，最好配上"如果放松错了会怎样"的说明；
@@ -389,21 +444,20 @@ scripts/verify-all.sh ch16      # 9 条断言
 
 ## 16.7 小结
 
-- **每个 `Ordering` 生成不同的指令**（AArch64）：
+- **本章选取的 Ordering 在 AArch64 上体现为不同指令**：
   `ldr`/`ldapr`/`ldar`、`str`/`stlr`、`ldadd`/`ldaddal`、`casal`。
   后缀 `a` = acquire、`l` = release、`al` = 两者。
 - **x86 的强内存模型让大部分 `Ordering` 消失**：
   三个 load 全是 `movq`，两个 store 全是 `movq`，
   产物里 **0 条 fence**。
 - **★ "放松内存序"的收益是架构相关的**：
-  在 x86 上，load/store 放松**一分钱都不省**，
-  连 RMW 的 `Relaxed` 和 `SeqCst` 都是同一条 `lock xaddq`。
+  在这份 x86 产物中，三个 load、Relaxed/Release store，以及
+  `fetch_add` 的 Relaxed/SeqCst 对照分别生成相同指令；这不包含 SeqCst store。
   **在 AArch64 上才真的有区别。**
-- **RMW 在任何架构上都必须显式同步**（`lock` 前缀 / `ldaddal`）——
-  这是两个架构唯一一致的地方。
-- **`Relaxed` 只保证原子性，不保证可见性**：
-  16.0 那个停止标志用 `Relaxed` 是 bug，可能永远不退出。
-  判据：**这个值是否需要"顺带告诉你别的东西也已可见"？**
+- **RMW 必须由原子机器操作或等价的原子指令序列实现**；排序强度仍由
+  `Ordering` 决定，不能把"原子 RMW"与"Acquire/Release 同步"混为一谈。
+- **纯停止标志可以用 `Relaxed`**；如果标志还要发布其他数据，才需要
+  Release/Acquire。判据是：**这个值是否需要顺带发布其他内存？**
 - **`SeqCst` 是默认推荐**，因为它的全序语义最容易推理；
   放松时必须写下论证。
 - **内存序的 bug 抓不到证据**：只能靠论证 + 工具，

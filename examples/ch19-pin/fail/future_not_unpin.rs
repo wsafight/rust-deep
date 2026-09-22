@@ -1,4 +1,4 @@
-// ⚠️ 故意编译不过：**所有 `async fn` 产生的 future 都是 `!Unpin`**
+// ⚠️ 故意编译不过：**当前 async fn 产生的 future 不自动实现 `Unpin`**
 // 复现：rustc --edition 2024 --crate-type=lib examples/ch19-pin/fail/future_not_unpin.rs
 //
 // 预期：
@@ -12,9 +12,8 @@
 //   `zero_await` 的函数体里**一个借用都没有**、**一次 `await` 都没有** ——
 //   它根本不可能是自引用的。但编译器照样不给它 `Unpin`。
 //
-//   为什么？因为 `Unpin` 是 **auto trait**，它的答案必须在**类型层**
-//   立即给出；而"这个状态机到底有没有自引用"要等借用检查之后才知道。
-//   编译器选择一律保守：**所有 `async` 产物都是 `!Unpin`**。
+//   这是当前编译器对匿名 async 状态机采取的保守语义：它们不会自动实现
+//   `Unpin`。这个反例只证明可观察的 API 行为，不推断内部 pass 的时序原因。
 //
 //   代价就是你到处要写 `Box::pin` / `pin!`；
 //   收益是"自引用 future 一定是安全的"这件事**无需任何额外规则**。

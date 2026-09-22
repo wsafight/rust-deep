@@ -1,8 +1,32 @@
 # 8. coherence、孤儿规则与 blanket impl
 
 > 一句话：孤儿规则不是"设计者的洁癖"，而是**"每个 (类型, trait) 对至多一个 impl"
-> 这条不变量的充分条件**——没有它，`v.to_string()` 到底该调哪个 impl
-> 就成了一个不可判定的问题。
+> 这条不变量的重要保障**——没有它，两个互不知情的依赖可以为同一组合提供
+> 冲突实现，`v.to_string()` 就失去唯一答案。
+
+## 先把语法认清
+
+`impl Trait for Type` 会在整个依赖图中声明一份实现。coherence 要求任意调用
+最多命中一个实现；孤儿规则进一步要求 trait 或被实现类型至少有一个由当前
+crate 定义。`impl<T: Bound> Trait for T` 是 blanket impl，会覆盖一整类类型。
+
+把整个依赖图想成一本公共电话簿：同一个“类型 + trait”只能登记一个号码。
+孤儿规则不是故意挡路，而是在决定**谁有资格往这本电话簿里写**。
+
+### 放到业务里：给第三方类型接入第三方协议
+
+应用常想给外部 SDK 类型实现 `serde::Serialize`、`Display` 或公司的统一转换
+trait，但“外部 trait + 外部类型”会被拒绝。正确工程手段通常是 newtype：
+`struct UserDto(external::User)`，由本 crate 拥有这个适配边界，同时避免未来
+依赖升级新增同名 impl 时产生全局冲突。
+
+```rust
+#[repr(transparent)]
+struct UserDto(external_sdk::User);
+impl Display for UserDto { /* 定义本项目的展示规则 */ }
+```
+
+newtype 不只是“骗过编译器”：它把协议适配、校验和兼容策略收进了本地类型。
 
 ## 8.0 一个会让你卡住的例子
 
@@ -45,9 +69,9 @@ impl<T: MyDisplay> MyDebug for T {          // ✅ 编译通过
 **同一个 `impl<T> ... for T`，只因为 trait 归属不同，一个行一个不行。**
 这一章要说明：判据是"**谁拥有 trait**"，而不是"这个 impl 看起来多合理"。
 
-## 8.1 表层解释（官方书会怎么讲）
+## 8.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - **孤儿规则**（orphan rule）：`impl 外部trait for 外部类型` 不行，
   trait 和类型至少有一个要是本地的；

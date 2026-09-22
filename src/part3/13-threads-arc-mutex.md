@@ -1,9 +1,33 @@
 # 13. 线程、`Arc` 与 `Mutex`
 
 > 一句话：上一章说 `Send` / `Sync` 在汇编里**一个字都不剩**。
-> 这一章要说反面：**`Arc` 的线程安全是"真的"有代码的** ——
-> 它的全部保证落在四条指令上：`ldadd`（加）、`ldaddl`（减）、
-> `dmb ishld`（屏障）、`brk`（溢出）。
+> 这一章要说反面：`Arc` 的引用计数确实会生成原子指令。
+> 下面用一个 clone、读取再 drop 的包装函数，观察 `ldadd`、`ldaddl`、
+> `dmb ishld` 与超过引用计数软上限时的 `brk`。
+
+## 先把语法认清
+
+`Arc<T>` 用原子引用计数提供跨线程共享所有权；`Mutex<T>` 用互斥访问把
+`&T` 安全地转换成临时的可变访问，锁守卫离开作用域时自动解锁。常见组合
+`Arc<Mutex<T>>` 分别回答“谁拥有”与“谁此刻能改”。
+
+一句话记住分工：`Arc` 管**钥匙有几把**，`Mutex` 管**现在谁能进门**。
+只有 `Arc` 没有互斥，只有 `Mutex` 又解决不了跨线程共享所有权。
+
+### 放到业务里：共享配置与聚合状态
+
+只读配置可直接用 `Arc<Config>` 分发给 worker；需要复合更新的订单统计、
+连接表或内存缓存可以用 `Arc<Mutex<State>>`。关键是缩小 guard 作用域，绝不在
+持锁时做慢 IO、用户回调或长计算；简单计数则优先考虑 atomic，避免把所有
+worker 串行化在一把锁上。
+
+```rust
+let snapshot = Arc::clone(&config);       // 只读共享
+let mut stats = stats.lock().unwrap();    // 复合状态短暂独占
+stats.record(status, elapsed);
+```
+
+两种操作看起来都叫“共享”，一个只增加所有者，一个还建立临界区。
 
 ## 13.0 一个会让你卡住的例子
 
@@ -28,9 +52,9 @@ println!("{}", a.len());          // ← a 还能用
 
 这一章把 `Arc` 拆到指令级。答案会具体到**四条指令**。
 
-## 13.1 表层解释（官方书会怎么讲）
+## 13.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - `Arc<T>` = Atomically Reference Counted，原子引用计数；
 - `Arc::clone` 递增引用计数，`drop` 递减，减到 0 时释放；
@@ -48,7 +72,7 @@ awk '/^__RNvCsrtIYgyWToU_3lib9clone_arc:/,/cfi_endproc/' .evidence/ch13-arc-mute
 
 ## 13.2 编译器眼里的样子
 
-### 13.2.1 `Arc::clone` 的完整函数体
+### 13.2.1 `clone_arc` 包装函数的完整函数体
 
 ```asm
 __RNvCsrtIYgyWToU_3lib9clone_arc:
@@ -79,21 +103,22 @@ LBB3_4:
 	brk	#0x1             ; ⑦ ★ 溢出时真的执行 brk 指令
 ```
 
-**整个 `Arc` 的线程安全就在这 20 条指令里。** 逐条读：
+这段函数不只做 `Arc::clone`：它还读取 payload，并在返回前 drop 临时的 `b`。
+因此这里同时出现了递增、读取和递减路径。逐条读：
 
 | # | 指令 | 作用 |
 |---|---|---|
 | ① | `ldr x8, [x0]` | 取出 `ArcInner` 的指针（`Arc` 本体只有一个指针） |
 | ② | `ldadd x9, x9, [x8]` | **原子**加 1，返回旧值 |
-| ③ | `tbnz x9, #63` | 旧值最高位为 1 → 计数即将溢出 |
+| ③ | `tbnz x9, #63` | 旧值超过 `isize::MAX` 软上限 → abort 路径 |
 | ④ | `ldr x19, [x8, #16]` | 读 payload（偏移 **16**） |
 | ⑤ | `ldaddl x9, x8, [x8]` | **原子**减 1（`l` = release 语义） |
 | ⑥ | `dmb ishld` | 减到 0 时的屏障（acquire 语义） |
-| ⑦ | `brk #0x1` | 溢出 → 直接 `brk`（不是 panic，是 abort） |
+| ⑦ | `brk #0x1` | 超过软上限 → 当前构建内联成 abort trap |
 
 ### 13.2.2 `ArcInner` 的内存布局
 
-从 ④ 可以直接读出布局：payload 在偏移 **16**。
+从 ④ 可以读出**当前工具链下这个 `Arc<u64>` 实例**的布局：payload 在偏移 16。
 
 ```text
 ArcInner<T> 的布局（AArch64，64 位）：
@@ -104,8 +129,8 @@ ArcInner<T> 的布局（AArch64，64 位）：
 
 **为什么是 16？** 因为前面有两个 `AtomicUsize`（各 8 字节）。
 
-> 这个偏移不是"文档说的"，是**实测出来的** ——
-> `ldr x19, [x8, #16]` 里的 `#16` 就是证据。
+> 这是当前 rustc 1.98.1 / AArch64 产物的实现观察，不是 `Arc` 的稳定 ABI。
+> `ldr x19, [x8, #16]` 能证明本次构建的偏移，不能约束未来版本。
 
 ### 13.2.3 `ldadd` 而不是 `ldaddal` —— 一个重要的细节
 
@@ -144,13 +169,15 @@ ch16: ldadd    ← fetch_add(Relaxed)
 **两条独立路径得到同一个结论** —— 一个从 `Arc` 的实现读出来，
 一个从 `fetch_add` 的不同 `Ordering` 读出来。
 
-### 13.2.4 溢出为什么是 `brk` 而不是 `panic!`
+### 13.2.4 为什么超过引用计数软上限会 abort
 
-⑦ 的 `brk #0x1` 是 AArch64 的"断点"指令，直接触发 abort。
+⑦ 的 `brk #0x1` 是当前 AArch64 构建把 `abort()` 内联后的 trap。
 
-**为什么不用 `panic!`？** 因为引用计数溢出意味着**内存已经被破坏了** ——
-此时再去做 panic（要格式化字符串、要 unwinding、要分配内存）
-可能踩到已经损坏的状态。**直接 abort 是唯一安全的选择。**
+标准库把 `MAX_REFCOUNT` 设为 `isize::MAX`。安全代码也可能通过大量
+`Arc::clone` 再 `mem::forget` 人为抬高计数，因此超过阈值不等于内存已经损坏。
+但计数若继续增长并最终回绕，就可能过早释放对象，破坏内存安全。
+`Arc::clone` 在观察到旧值超过软上限时选择 abort，以阻止程序继续逼近回绕；
+源码也明确说明，触发点不保证恰好是 `MAX_REFCOUNT + 1`。
 
 实测确认：这条 `brk` **真的**生成了，不是文档传说。
 
@@ -174,12 +201,12 @@ error[E0277]: `Cell<u64>` cannot be shared between threads safely
 
 ### 13.2.6 `Mutex`：★ 平台差异（macOS 上是 pthread，不是 futex）
 
-`Mutex::lock` 的 `-O` AArch64 汇编（截取关键部分）：
+`Mutex::lock` 包装函数的 `-O` AArch64 汇编（截取关键部分）：
 
 ```asm
 _lock_mutex:
 	...
-	ldapr	x0, [x0]          ; ★ 先做一次 acquire 读（fast path 尝试）
+	ldapr	x0, [x0]          ; ★ 读取 pthread Mutex 的 OnceBox 初始化状态
 	cbz	x0, LBB6_5
 	bl	__RNvMNtNtNtNtNtCs82bWklYMk3w_3std3sys3pal4unix4sync5mutexNtB2_5Mutex4lock
 	...
@@ -239,10 +266,9 @@ cvt_nz(libc::pthread_mutexattr_settype(attr, libc::PTHREAD_MUTEX_NORMAL)).unwrap
 > | Linux / Windows / Android / FreeBSD… | `futex`（`mod futex;`） |
 > | 其他 Unix（**包括 macOS**） | `pthread`（`mod pthread;`） |
 >
-> **`futex` 路径在 Linux 上才存在** —— 但即使在那里，
-> `sys::Mutex` 也是包在一个 `OnceBox` 里的
-> （`sys/sync/mutex/pthread.rs`：`pal: OnceBox<pal::Mutex>`），
-> 因为 `pthread_mutex_t` 需要运行时初始化。
+> Linux 等目标的 futex 路径直接保存原子状态；macOS 所走的 pthread 路径
+> 才使用 `OnceBox<pal::Mutex>` 做懒初始化，因为 `pthread_mutex_t` 需要
+> 运行时初始化。
 >
 > **所以正确说法是**：`std::sync::Mutex` 是一个**平台适配的包装**，
 > 它的语义（阻塞、`PTHREAD_MUTEX_NORMAL` 的死锁行为）由 `pal` 层保证。
@@ -281,17 +307,15 @@ drop:   ldaddl        （Release）
 > 这个论证可以在 `std` 源码里逐字读到
 > （`library/alloc/src/sync.rs` 里 `Arc` 的 `Drop` 实现附近）。
 
-### 为什么溢出要 `brk` 而不是 panic
+### 为什么这里选择 abort 而不是 panic
 
-引用计数溢出（`usize` 用满）意味着程序已经持有了 2^64 个引用 ——
-这在现实中只可能发生在**内存已经被破坏**的情况下。
+`Arc::clone` 先执行 `fetch_add`，再检查旧值是否超过 `isize::MAX`。
+由于 `mem::forget` 可以安全地泄漏 clone 出来的句柄，异常大的计数并不自动
+意味着此前已经发生 UB；真正必须阻止的是计数继续增长并最终回绕。
 
-此时：
-
-- `panic!` 要格式化消息 → 要分配内存 → 可能再次触发损坏；
-- unwinding 要遍历栈 → 可能碰到已经释放的帧。
-
-**`brk` 是唯一不依赖任何运行时设施的选择。** 这是"防御性编程"的极端形式。
+此处不能依赖可恢复的 panic：unwind 后引用计数已经被增加，继续执行会让
+这个全局不变量更难维持。当前实现调用 `abort()`，在本次 AArch64 构建里
+表现为 `brk #0x1`。这是实现选择，不应把具体 trap 当成语言保证。
 
 ### 为什么 `Mutex` 要平台适配
 
@@ -304,7 +328,7 @@ drop:   ldaddl        （Release）
 `std` 的解法是定义一层 **`pal`（platform abstraction layer）**，
 把"锁"的语义固定下来，实现交给平台。
 
-★ 而 `OnceBox` 那一层暴露了一个**更本质的差异**：
+★ pthread 路径中的 `OnceBox` 暴露了一个**更本质的差异**：
 pthread 的 `pthread_mutex_t` **需要运行时初始化**
 （`pthread_mutex_init` 要设置 `attr`），而 futex 只需要一个 `AtomicU32`。
 所以 `sys::sync::mutex::Mutex` 在 pthread 路径上必须多一层 `OnceBox`
@@ -352,16 +376,15 @@ pthread 的 `pthread_mutex_t` **需要运行时初始化**
 因为 `Arc<T>` 里存的是 `*const ArcInner<T>`，
 而 `ArcInner<T>` 的大小只影响**堆上**的分配。
 
-### 反直觉之三：`Mutex` 的"快路径"也在汇编里
+### 反直觉之三：包装层也会泄漏平台初始化策略
 
-`lock_mutex` 的第一条是 `ldapr x0, [x0]` ——
-一次 **acquire 读**，然后 `cbz` 判断。
+`lock_mutex` 开头的 `ldapr` + `cbz` 检查的是 pthread mutex 所在
+`OnceBox` 是否已经初始化；真正的加锁仍进入 pthread 实现。
+不能仅凭这两条指令断言这是锁本身的无竞争 fast path。
 
-这是 std 的 fast path：**先试着直接拿锁**，
-拿不到才进 `pthread_mutex_lock`（那里会做真正的阻塞等待）。
-
-**所以"加锁"不是一个原子操作，是"一次原子读 + 可能的系统调用"。**
-这解释了为什么无竞争时 `Mutex` 很便宜，有竞争时会突然变贵。
+这组汇编可靠地说明的是：macOS 的 std 包装层需要懒初始化，Linux 的 futex
+实现则直接持有原子状态。至于 pthread 内部如何优化无竞争路径，必须进一步
+检查系统库实现或用性能工具测量。
 
 ### 反直觉之四：`MutexGuard` 的 `!Send` 不是"保守"，是**必需**
 
@@ -381,7 +404,7 @@ pthread 的 `pthread_mutex_t` **需要运行时初始化**
 tools/evidence.sh ch13-arc-mutex
 scripts/verify-all.sh ch13
 
-# ★ 全部四条指令（完整函数体）
+# clone + 读 payload + drop 包装函数中的关键指令
 awk '/^__RNvCsrtIYgyWToU_3lib9clone_arc:/,/cfi_endproc/' .evidence/ch13-arc-mutex-lib.O3.s
 
 # 只挑关键指令
@@ -395,8 +418,8 @@ grep -c 'unlock' .evidence/ch13-arc-mutex-lib.O3.s
 **怎么算验证成功**：
 
 1. `clone_arc` 的函数体里有 `ldadd`（加）、`ldaddl`（减）、
-   `dmb ishld`（屏障）、`brk #0x1`（溢出）四条关键指令；
-2. `ldr x19, [x8, #16]` —— **payload 在偏移 16**（前面两个 `AtomicUsize`）；
+   `dmb ishld`（屏障）、`brk #0x1`（超过软上限后的 trap）四条关键指令；
+2. `ldr x19, [x8, #16]` —— 当前构建的 `Arc<u64>` payload 在偏移 16；
 3. `ldadd` **没有** `al` 后缀 —— `Arc::clone` 用的是 `Relaxed`；
 4. `lock_mutex` 的符号里出现 `pal4unix4sync5mutex` —— **macOS 上是 pthread**；
 5. `grep -c unlock` 命中 3 次 —— `MutexGuard::drop` 会解锁。
@@ -431,16 +454,17 @@ unsafe impl<T: ?Sized + Sync + Send, A: Allocator + Sync> Sync for Arc<T, A> {}
 **三条合起来，就是 `unsafe impl Send/Sync` 的完整论证。**
 第 24–25 章会给出更多这样的论证模板。
 
-★ 另一个和 `unsafe` 相关的点是 `brk #0x1`：
-**标准库宁愿直接 abort，也不愿在可能已损坏的状态下做 panic。**
-这是"防御性设计"在 `unsafe` 边界上的体现。
+★ 另一个和 `unsafe` 相关的点是引用计数软上限：标准库必须在计数
+可能回绕、进而导致提前释放之前终止进程。这是安全抽象主动防守其
+全局不变量的例子。
 
 ## 13.7 小结
 
-- **`Arc` 的线程安全落在四条指令上**：
-  `ldadd`（加）、`ldaddl`（减）、`dmb ishld`（屏障）、`brk #0x1`（溢出）。
-- **`ArcInner` 的布局**：`strong` 在 0、`weak` 在 8、**payload 在 16**
-  （`ldr x19, [x8, #16]` 就是证据）。
+- **包装函数暴露了 `Arc` 的关键实现痕迹**：`ldadd`（加）、
+  `ldaddl`（减）、`dmb ishld`（最后一次 drop 的 acquire fence）以及
+  超过引用计数软上限时的 `brk #0x1`。
+- **当前 `Arc<u64>` 实例的布局**是 strong=0、weak=8、payload=16；
+  这是实现观察，不是稳定 ABI。
 - **`Arc::clone` 用的是 `Relaxed`**（`ldadd` 没有 `al` 后缀）——
   引用计数只负责生命周期，不负责数据同步。
   **只有最后一次 drop 才需要 `Release` + `Acquire`。**
@@ -448,9 +472,9 @@ unsafe impl<T: ?Sized + Sync + Send, A: Allocator + Sync> Sync for Arc<T, A> {}
   `Arc` 既让你移动它，也让你共享它 —— 责任最终落在 payload 上。
 - **`Arc<u64>` 是 8 字节**（一个指针），但 `Arc<dyn Trait>` 是 16 字节
   （胖指针）—— `Arc` 的胖瘦取决于 `T`。
-- **`Mutex` 在 macOS 上是 `pthread_mutex`，不是 futex**：
-  符号名 `pal4unix4sync5mutex` 就是证据；`futex` 路径只在 Linux 上存在，
-  且仍然包在 `OnceBox` 里（`pthread_mutex_t` 需要运行时初始化）。
+- **`Mutex` 在 macOS 上是 `pthread_mutex`，Linux 等目标走 futex 实现**。
+  `OnceBox` 只属于需要运行时初始化的 pthread 路径；futex 路径直接保存
+  原子状态。
 - **`MutexGuard` 的 `!Send` 是必需的**：pthread 只允许加锁线程解锁，
   而 `MutexGuard::drop` 就是 `unlock`（实测汇编里 3 次 `unlock`）。
 - **`unsafe impl Send/Sync for Arc<T>` 是本章最值得模仿的论证**：

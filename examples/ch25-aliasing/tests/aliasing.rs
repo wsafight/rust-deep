@@ -8,10 +8,7 @@
 //! - `sb_legal.rs` 演示的是**手工裸指针**下的合法边界；
 //! - 本文件演示的是**本章的主角**：`UnsafeCell` 与 `PhantomData`。
 //!
-//! `#![cfg(miri)]` 不是因为这些代码不合法，而是因为
-//! "通过 Stacked Borrows 检查"这件事只有 Miri 能证明。
-
-#![cfg(miri)]
+//! 普通测试可回归功能行为；Miri 额外检查当前别名模型能够发现的 UB。
 
 use ch25_aliasing::{Cell2, SharedReadOnly, SharedReadWrite};
 use std::cell::UnsafeCell;
@@ -44,7 +41,7 @@ fn raw_roundtrip() {
     assert_eq!(x, 8);
 }
 
-/// ★ `SharedReadOnly`（`PhantomData<&'a T>`）：只读访问合法。
+/// ★ `SharedReadOnly`：指针来自 `&T`，只读访问合法。
 #[test]
 fn shared_read_only_is_fine() {
     let x = 5u64;
@@ -52,10 +49,10 @@ fn shared_read_only_is_fine() {
     assert_eq!(a.get(), 5);
 }
 
-/// ★ `SharedReadWrite`（`PhantomData<&'a UnsafeCell<T>>`）：读写都合法。
+/// ★ `SharedReadWrite`：指针来自 `UnsafeCell::get()`，读写都合法。
 ///
-/// 两个结构体的字段布局完全一样，区别只在 `PhantomData` 的类型参数 ——
-/// 而这个区别正是 Miri 用来判断"这个指针允许被写吗"的依据。
+/// 两个结构体的字段布局完全一样；Miri 判定的差异来自实际指针来源，
+/// `PhantomData` 只补充外层类型的静态借用关系。
 #[test]
 fn shared_read_write_is_fine() {
     let c = UnsafeCell::new(5u64);

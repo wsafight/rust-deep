@@ -41,7 +41,8 @@ fn same_cov<'s>(h: CovHolder<'s>, s: &'s str) -> usize { h.r.len() + s.len() }
 
 /// 一个"接受任意生命周期"的函数，当然也能接受 `'static`。
 /// 这就是 `fn(&'a str)` 在参数位置上**逆变**的体现：
-/// `fn(&'static str)` 是 `fn(&'a str)` 的**子类型**（因为 `'static` 是 `'a` 的子类型）。
+/// `fn(&'a str)` 是 `fn(&'static str)` 的**子类型**：
+/// 能接受任意短期引用的函数，当然能胜任“只会收到 `'static`”的位置。
 #[unsafe(no_mangle)]
 pub fn contrav_ok() -> usize { apply_static(any_lifetime) }
 

@@ -1,8 +1,33 @@
-# 7. dyn vs 泛型：object safety 与单态化代价
+# 7. dyn vs 泛型：dyn compatibility 与单态化代价
 
-> 一句话：`dyn` 的代价不是一个"抽象惩罚"，而是**一次内存加载 + 一次间接跳转**——
-> 前者是因为 vtable 是数据，后者是因为编译器不知道会调到哪。
+> 一句话：在无法去虚化的简单调用点，`dyn` 的直接调用成本通常表现为
+> **从 vtable 读取函数指针，再做一次间接跳转**。更大的潜在代价是优化器
+> 可能无法继续内联。
 > 而"什么 trait 能做 `dyn`"这个问题，答案也在 vtable 的**布局**里。
+
+## 先把语法认清
+
+`fn run<T: Service>(s: &T)` 使用静态分发：编译器为具体 `T` 单态化。
+`fn run(s: &dyn Service)` 使用动态分发：值由数据指针和 vtable 指针组成，
+运行时通过表中的函数指针调用。`Box<dyn Service>` 则把具体值放到堆上，
+常用于需要统一存储多种实现的场景。
+
+泛型像为每种类型单独裁一套衣服，`dyn` 像统一走总机转接。前者容易内联，
+后者能把不同实现放进同一个容器；没有谁天然高级，只有边界放得对不对。
+
+### 放到业务里：插件集合与高频调用内核
+
+插件注册表通常需要 `Vec<Box<dyn Plugin>>`，因为插件类型在运行前不统一；
+序列化热循环或数值内核则更适合泛型，让 LLVM 有机会内联和向量化。真实设计
+往往两者并用：系统边界用 `dyn` 保持可扩展，内部热路径转成具体类型或枚举。
+
+```rust
+let plugins: Vec<Box<dyn Plugin>> = load_plugins();
+for plugin in &plugins { plugin.on_request(&request); }
+```
+
+这里插件类型直到配置加载后才知道，`dyn` 换来的运行时可替换性通常比一次
+间接调用更重要。
 
 ## 7.0 一个会让你卡住的例子
 
@@ -43,9 +68,9 @@ note: ...because method `clone_me` references the `Self` type in its return type
 
 **两种看起来无关的写法，报的是同一类错误。** 这一章要说明它们为什么是同一件事。
 
-## 7.1 表层解释（官方书会怎么讲）
+## 7.1 先把常见说法摆上桌
 
-官方书会说：
+通常会这样概括：
 
 - object safety（现在叫 **dyn compatibility**）要求：方法不能有泛型参数、
   不能返回 `Self`、不能有 `where Self: Sized` 之外的 `Self` 用法；
@@ -57,7 +82,7 @@ note: ...because method `clone_me` references the `Self` type in its return type
 
 ## 7.2 编译器眼里的样子
 
-### 7.2.1 vtable 长什么样（回顾第 3.7 节的实测）
+### 7.2.1 vtable 长什么样（本章实测）
 
 ```asm
 	.section	__DATA,__const
@@ -154,7 +179,7 @@ _area_boxed:
 	br	x1
 ```
 
-**这就是动态分发的全部代价**：
+**这是这个最小调用点里能直接看到的动态分发成本**：
 
 1. **一次额外的内存加载**：从 vtable 取地址（`ldr x1, [x9, #24]`）；
 2. **一次间接跳转**：`br x1` —— 无法内联、分支预测器可能失手；
@@ -303,7 +328,8 @@ rustc --edition 2024 --crate-type=lib \
 
 1. `.O3.s` 里能看到 `__DATA,__const` 段，`.asciz` 的下一行是 `.quad`
    —— vtable 的 24 字节头部 + 方法指针；
-2. `dyn_area` 的汇编是 `ldr x1, [x1, #24]` + `br x1` —— 动态分发的全部代价；
+2. `dyn_area` 的汇编是 `ldr x1, [x1, #24]` + `br x1` ——
+   这是该最小调用点的直接分发成本；
 3. `call_generic` 的汇编是 `ldr` + `fmul` —— 泛型被完全内联；
 4. 两个反例都报 **E0038**，且错误信息里都提到
    `needs to allow building a vtable`。
@@ -328,8 +354,8 @@ Rust 没有承诺它稳定。要看可以，要依赖不行。
 
 ## 7.7 小结
 
-- **`dyn` 的代价是具体的**：一次额外的 `ldr`（从 vtable 取地址）
-  + 一次 `br`（间接跳转，无法内联）。没有玄学。
+- **`dyn` 的直接成本可以观察**：本章最小样本是一条额外 `ldr` 加一次
+  间接 `br`；真实成本还包括可能失去的内联和后续优化机会。
 - **`&dyn T` 是 16 字节的胖指针**，不是 8 字节——
   这是动态分发的**内存**代价。
 - **dyn compatibility（旧称 object safety）的判据是"能不能建出定长 vtable"**：
