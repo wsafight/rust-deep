@@ -16,7 +16,7 @@ pub fn send_string() -> usize {
     let (tx, rx) = mpsc::channel::<String>();
     let s = String::from("hello");
     let len = s.len();
-    tx.send(s).unwrap();   // ← s 在这里被 move 走
+    tx.send(s).unwrap(); // ← s 在这里被 move 走
     // println!("{s}");    // ← 取消注释会报 E0382: use of moved value
     drop(tx);
     let got = rx.recv().unwrap();
@@ -32,7 +32,7 @@ pub fn send_arc() -> usize {
     tx.send(Arc::clone(&s)).unwrap();
     drop(tx);
     let got = rx.recv().unwrap();
-    got.len() + s.len()   // ← s 仍然可用（引用计数 +1）
+    got.len() + s.len() // ← s 仍然可用（引用计数 +1）
 }
 
 /// 跨线程发送：`Send` 是编译期检查，运行时零成本

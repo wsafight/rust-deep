@@ -50,7 +50,11 @@ fn value_moved_between_allocations() {
     a.self_ref = std::ptr::addr_of_mut!(a.data);
 
     // 把**值**搬进新的 Box，并释放旧的
-    let b = Box::new(RawSelfRef { data: a.data, self_ref: a.self_ref, _pin: PhantomPinned });
+    let b = Box::new(RawSelfRef {
+        data: a.data,
+        self_ref: a.self_ref,
+        _pin: PhantomPinned,
+    });
     drop(a); // ← 旧地址被释放；此时 b.self_ref 是悬垂指针
 
     // SAFETY（伪）：b.self_ref 指向已释放的内存

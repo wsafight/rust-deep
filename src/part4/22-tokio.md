@@ -22,7 +22,7 @@
 `LocalSet`。`'static` 不表示对象永远存活，只表示任务不借用可能提前离开的
 栈变量，拥有 `String`、`Arc<T>` 等数据完全可以满足它。
 
-```rust
+```rust,ignore
 let body = Arc::clone(&body);
 tokio::spawn(async move { handle(body).await });
 tokio::task::spawn_blocking(move || legacy_sdk_call());
@@ -53,7 +53,7 @@ tokio::spawn 要求 F: Send + 'static
 
 你写了一个自认为没问题的并发任务：
 
-```rust
+```rust,ignore
 use std::sync::{Arc, Mutex};
 
 pub async fn bad(c: Arc<Mutex<u64>>) {
@@ -79,7 +79,7 @@ note: required by a bound in `spawn`
 
 于是你改用"把数据搬进去"的写法：
 
-```rust
+```rust,ignore
 pub fn spawn_it() {
     let v = vec![1u64, 2];
     tokio::spawn(async { v.len() });
@@ -96,7 +96,7 @@ error[E0373]: async block may outlive the current function, but it borrows `v`,
 
 第三个问题更微妙 —— 下面这段**编译得过**：
 
-```rust
+```rust,ignore
 pub async fn rc_within_task() -> u64 {
     let r = std::rc::Rc::new(1u64);      // Rc 是 !Send
     tokio::task::yield_now().await;      // r 还跨了 await
@@ -127,7 +127,7 @@ pub async fn rc_within_task() -> u64 {
 
 `tokio::spawn` 的签名（简化）：
 
-```rust
+```rust,ignore
 pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
 where
     F: Future + Send + 'static,
@@ -143,7 +143,7 @@ where
 
 ★ 对照 `std::thread::spawn`：
 
-```rust
+```rust,ignore
 pub fn spawn<F, T>(f: F) -> JoinHandle<T>
 where
     F: FnOnce() -> T + Send + 'static,
@@ -183,7 +183,7 @@ note: required by a bound in `spawn`
 
 **修法**（`src/lib.rs` 的 `shared_counter`）：把锁的作用域收进一个块。
 
-```rust
+```rust,ignore
 tokio::spawn(async move {
     let cur = { let g = c.lock().unwrap(); *g };   // ← guard 在 await 之前 drop
     tokio::task::yield_now().await;
@@ -213,7 +213,7 @@ error[E0373]: async block may outlive the current function, but it borrows `v`,
 | **把所有权搬进去** | `async move { s.len() }` | 值被移走，调用者不能再用了 |
 | **共享所有权** | `Arc<str>` / `Arc<[T]>` | 一次原子计数（第 13 章） |
 
-```rust
+```rust,ignore
 pub fn spawn_owned(s: String) -> JoinHandle<usize> {
     tokio::spawn(async move { s.len() })
 }
@@ -227,7 +227,7 @@ pub fn spawn_shared(s: Arc<str>) -> JoinHandle<usize> {
 
 回到 22.0 的第三个现象：
 
-```rust
+```rust,ignore
 pub async fn rc_within_task() -> u64 {
     let r = std::rc::Rc::new(1u64);      // Rc 是 !Send
     tokio::task::yield_now().await;      // r 跨了 await
@@ -257,7 +257,7 @@ _rc_within_task:
 
 ### 22.2.5 逃生门：`LocalSet` / `spawn_local`
 
-```rust
+```rust,ignore
 pub async fn local_task() -> u64 {
     let local = tokio::task::LocalSet::new();
     local
@@ -288,7 +288,7 @@ _local_task:
 tokio 的 worker 线程数默认 = CPU 核数（多线程 runtime）。
 一个任务阻塞住，那个 worker 上的**其他所有任务都停摆**。
 
-```rust
+```rust,ignore
 pub async fn blocking_work(data: Vec<u64>) -> u64 {
     tokio::task::spawn_blocking(move || {
         data.iter().fold(0u64, |a, b| a.wrapping_add(*b))
@@ -340,7 +340,7 @@ tokio 的多线程 runtime 有一组 worker 线程，任务被放进一个队列
 
 因为**任务可能比调用者活得久**。
 
-```rust
+```rust,ignore
 fn handler() {
     tokio::spawn(async { /* 长时间的任务 */ });
     // ← 函数返回了，但任务还在跑
@@ -389,7 +389,7 @@ async fn            →  只要求"是个 Future"
 
 ### 反直觉之二：`async` 块不会自动 `move`
 
-```rust
+```rust,ignore
 let v = vec![1, 2];
 tokio::spawn(async { v.len() });      // ← E0373
 ```
@@ -405,7 +405,7 @@ tokio::spawn(async { v.len() });      // ← E0373
 
 ### 反直觉之三：`spawn_blocking` 的闭包**不是** future
 
-```rust
+```rust,ignore
 tokio::task::spawn_blocking(move || { /* 同步代码 */ })
 ```
 
@@ -434,7 +434,7 @@ tokio 的 worker 数默认 = CPU 核数。所以：
 
 第 21 章说"`async fn in trait` 表达不了 `Send`"。现在能看清它的**工程形态**了：
 
-```rust
+```rust,ignore
 // 一个库里这样定义
 pub trait Store {
     async fn get(&self, k: u64) -> u64;      // ← 返回的 future 保证不了 Send
@@ -452,14 +452,14 @@ tokio::spawn(async move { store.get(1).await });   // ← 错误
 
 ### 反直觉之六：`#[tokio::main]` 就是一个宏
 
-```rust
+```rust,ignore
 #[tokio::main]
 async fn main() { ... }
 ```
 
 展开后大致是：
 
-```rust
+```rust,ignore
 fn main() {
     tokio::runtime::Runtime::new().unwrap().block_on(async { ... })
 }
@@ -469,7 +469,7 @@ fn main() {
 
 **实测的展开结果**（`cargo expand -p ch22-tokio --bin ch22-tokio`，只看尾部）：
 
-```rust
+```rust,ignore
 fn main() {
     let body = async { /* 你写的 main 体 */ };
     {
@@ -490,7 +490,7 @@ fn main() {
 **实践含义**：`#[tokio::main]` 的默认 runtime 是**多线程**的，
 可以换成单线程：
 
-```rust
+```rust,ignore
 #[tokio::main(flavor = "current_thread")]
 async fn main() { ... }
 ```
@@ -551,7 +551,7 @@ cargo expand -p ch22-tokio | head -40
 
 tokio 把这句话变成了**生产事故**：
 
-```rust
+```rust,ignore
 // ❌ 不要这样"修复"编译错误
 unsafe impl Send for MyTask {}
 ```

@@ -41,7 +41,7 @@ pub struct SelfRef {
     /// 用 `*mut` 而不是 `*const` 不是巧合：`*const` 对应的
     /// `addr_of!` 会派生 SharedReadOnly 权限，写一次就失效（见 `new`）。
     self_ref: *mut u64,
-    _pin: PhantomPinned,        // ← 让 SelfRef 变成 !Unpin
+    _pin: PhantomPinned, // ← 让 SelfRef 变成 !Unpin
 }
 
 impl SelfRef {
@@ -108,13 +108,13 @@ impl SelfRef {
 ///
 /// ```asm
 /// _make_self_ref:
-/// 	mov	x19, x0
-/// 	mov	w0, #16              ; 16 字节 = u64 + 指针
-/// 	mov	w1, #8               ; align 8
-/// 	bl	___rust_alloc_zeroed
-/// 	cbz	x0, LBB1_2           ; 分配失败 → 走 panic
-/// 	stp	x19, x0, [x0]        ; ★ 一次写入：data 和自引用指针
-/// 	ret
+///     mov    x19, x0
+///     mov    w0, #16              ; 16 字节 = u64 + 指针
+///     mov    w1, #8               ; align 8
+///     bl     ___rust_alloc_zeroed
+///     cbz    x0, LBB1_2           ; 分配失败 → 走 panic
+///     stp    x19, x0, [x0]        ; ★ 一次写入：data 和自引用指针
+///     ret
 /// ```
 ///
 /// `stp x19, x0, [x0]` 这一条就是"自引用"的全部运行时形态：
@@ -137,10 +137,14 @@ pub fn read_self_ref(p: &Pin<Box<SelfRef>>) -> u64 {
 // ============================================================
 
 #[unsafe(no_mangle)]
-pub fn plain(x: &mut u64) -> u64 { *x }
+pub fn plain(x: &mut u64) -> u64 {
+    *x
+}
 
 #[unsafe(no_mangle)]
-pub fn pinned(p: Pin<&mut u64>) -> u64 { *p }
+pub fn pinned(p: Pin<&mut u64>) -> u64 {
+    *p
+}
 
 // ============================================================
 // 3) `Unpin` 是 auto trait
@@ -148,23 +152,35 @@ pub fn pinned(p: Pin<&mut u64>) -> u64 { *p }
 
 /// `u64: Unpin`（自动推导）→ `Pin::new` 可用。
 #[unsafe(no_mangle)]
-pub fn pin_a_u64(x: &mut u64) -> Pin<&mut u64> { Pin::new(x) }
+pub fn pin_a_u64(x: &mut u64) -> Pin<&mut u64> {
+    Pin::new(x)
+}
 
 /// 一个**普通**结构体：自动是 `Unpin`（因为所有字段都是 `Unpin`）。
-pub struct Plain { pub a: u64 }
+pub struct Plain {
+    pub a: u64,
+}
 
 #[unsafe(no_mangle)]
-pub fn pin_a_plain(x: &mut Plain) -> Pin<&mut Plain> { Pin::new(x) }
+pub fn pin_a_plain(x: &mut Plain) -> Pin<&mut Plain> {
+    Pin::new(x)
+}
 
 /// ★ 一个 `!Unpin` 的类型：只因为多了一个 `PhantomPinned` 字段。
 ///
 /// `PhantomPinned` 是**零大小**的 —— `NotUnpin` 的布局和 `Plain` 完全一样。
 /// 但它让整个类型不再是 `Unpin`，于是 `Pin::new` 拒绝编译。
-pub struct NotUnpin { pub a: u64, _p: PhantomPinned }
+pub struct NotUnpin {
+    pub a: u64,
+    _p: PhantomPinned,
+}
 
 #[unsafe(no_mangle)]
 pub fn box_pin_not_unpin(a: u64) -> Pin<Box<NotUnpin>> {
-    Box::pin(NotUnpin { a, _p: PhantomPinned })
+    Box::pin(NotUnpin {
+        a,
+        _p: PhantomPinned,
+    })
 }
 
 // ============================================================
@@ -175,7 +191,9 @@ pub fn box_pin_not_unpin(a: u64) -> Pin<Box<NotUnpin>> {
 ///
 /// 这个函数能编译：它只要 `&T`（`Deref`）。
 #[unsafe(no_mangle)]
-pub fn read_pinned(p: &Pin<Box<NotUnpin>>) -> u64 { p.a }
+pub fn read_pinned(p: &Pin<Box<NotUnpin>>) -> u64 {
+    p.a
+}
 
 /// 要拿 `&mut T`，必须 `unsafe` + 自己承诺"不会移动它"。
 ///
@@ -203,7 +221,10 @@ pub fn write_pinned(p: &mut Pin<Box<NotUnpin>>, v: u64) {
 /// | 能否返回 | ✅ | ❌ |
 #[unsafe(no_mangle)]
 pub fn pin_on_stack(data: u64) -> u64 {
-    let pinned = std::pin::pin!(NotUnpin { a: data, _p: PhantomPinned });
+    let pinned = std::pin::pin!(NotUnpin {
+        a: data,
+        _p: PhantomPinned
+    });
     // `pinned` 是 `Pin<&mut NotUnpin>` —— 借用的是隐藏的局部变量
     pinned.a
 }
@@ -234,7 +255,7 @@ pub fn pin_on_stack(data: u64) -> u64 {
 pub async fn borrow_across_await() -> u64 {
     let x = String::from("hi");
     let r = &x;
-    std::future::ready(()).await;   // ← r 跨过这个 await 还活着
+    std::future::ready(()).await; // ← r 跨过这个 await 还活着
     r.len() as u64
 }
 
@@ -255,4 +276,6 @@ pub async fn borrow_across_await() -> u64 {
 ///
 /// 这个"宁可保守"的代价，就是你在异步代码里到处见到 `Box::pin` 的原因。
 #[unsafe(no_mangle)]
-pub async fn zero_await(a: u64) -> u64 { a }
+pub async fn zero_await(a: u64) -> u64 {
+    a
+}

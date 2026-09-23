@@ -36,6 +36,7 @@ pub fn provably_in_bounds(v: &[u8; 4], i: usize) -> u8 {
 
 /// 对照：`Vec` 增长时 LLVM 无法消除检查
 #[unsafe(no_mangle)]
+#[allow(clippy::needless_range_loop)]
 pub fn sum_all(v: &[u64]) -> u64 {
     let mut s = 0u64;
     for i in 0..v.len() {

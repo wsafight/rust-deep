@@ -55,7 +55,7 @@ error[E0106]: missing lifetime specifier
 
 **修法**：显式写 `<'a>`：
 
-```rust
+```rust,ignore
 pub fn pick<'a>(x: &'a [u64], y: &'a [u64]) -> &'a u64 { ... }
 ```
 
@@ -254,7 +254,7 @@ error[E0382]: borrow of moved value: `s`
 
 ★ 在 channel 一章里，这个错误是**特性不是 bug**（第 14 章）：
 
-```rust
+```rust,ignore
 tx.send(msg).unwrap();
 println!("{msg}");      // ← E0382
 ```
@@ -310,7 +310,7 @@ error[E0515]: cannot return value referencing local variable `local`
 
 ★ 在生命周期一章里，这个错误常出现在"**过度标注**"的代码上：
 
-```rust
+```rust,ignore
 fn tied<'a>(x: &'a str, _y: &'a str) -> &'a str { x }
 
 pub fn use_tied() -> &'static str {

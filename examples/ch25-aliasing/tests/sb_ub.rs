@@ -17,8 +17,8 @@ fn invalidated_shared_ref() {
     let p: *mut u64 = &mut x;
     // SAFETY（伪）：这里其实不 sound —— 正是本节要展示的 UB
     let r: &u64 = unsafe { &*p };
-    unsafe { *p = 1 };      // 通过裸指针写，把 r 从借用栈里弹掉
-    assert_eq!(*r, 1);      // ← 用已失效的 r：UB
+    unsafe { *p = 1 }; // 通过裸指针写，把 r 从借用栈里弹掉
+    assert_eq!(*r, 1); // ← 用已失效的 r：UB
 }
 
 /// 悬垂指针 —— Miri 报：
@@ -27,8 +27,8 @@ fn invalidated_shared_ref() {
 fn dangling_pointer() {
     let mut v = vec![1u64, 2, 3];
     let p: *const u64 = &v[0];
-    v.push(4);              // 可能 realloc，v 的缓冲区被释放
+    v.push(4); // 可能 realloc，v 的缓冲区被释放
     // SAFETY（伪）：v 已重新分配，p 悬垂
     let x = unsafe { *p };
-    assert!(x == 1 || x == 4);   // 结果不可预测
+    assert!(x == 1 || x == 4); // 结果不可预测
 }

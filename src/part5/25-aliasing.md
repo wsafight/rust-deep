@@ -22,7 +22,7 @@ drop check、variance 和 auto trait。
 则必须通过 `UnsafeCell` 表达内部可变性。两者职责不同：前者补静态类型关系，
 后者改变共享引用下的可变性规则。
 
-```rust
+```rust,ignore
 struct Handle<'a> {
     ptr: *mut Record,
     _borrow: PhantomData<&'a mut Record>,
@@ -43,7 +43,7 @@ LLVM 元数据只是其中可观察的一层。
 
 你想写一个"共享的计数器"：
 
-```rust
+```rust,ignore
 pub struct BadCounter { n: u64 }
 
 impl BadCounter {
@@ -72,7 +72,7 @@ error: assigning to `&T` is undefined behavior, consider using an `UnsafeCell`
 
 于是你改用 `UnsafeCell`：
 
-```rust
+```rust,ignore
 pub struct Cell2<T> { inner: UnsafeCell<T> }
 
 impl<T: Copy> Cell2<T> {
@@ -86,7 +86,7 @@ impl<T: Copy> Cell2<T> {
 
 更奇怪的是第三个问题。下面这段**编译得过、也跑得对**，但 Miri 说它是 UB：
 
-```rust
+```rust,ignore
 let c = UnsafeCell::new(1u64);
 let r: &u64 = unsafe { &*c.get() };   // ① 先建一个 &T
 unsafe { *c.get() = 2 };              // ② 通过 UnsafeCell 写
@@ -195,7 +195,7 @@ MIR 在本章只能承担"展示 `no_retag` 长什么样、纠正误解"的角�
 
 `UnsafeCell` 的全部作用就是：**把"只读"这条性质从 `&UnsafeCell<T>` 上摘掉。**
 
-```rust
+```rust,ignore
 pub struct Cell2<T> { inner: UnsafeCell<T> }
 
 impl<T: Copy> Cell2<T> {
@@ -239,7 +239,7 @@ error: assigning to `&T` is undefined behavior, consider using an `UnsafeCell`
 
 对照的两个函数**只差两行的顺序**：
 
-```rust
+```rust,ignore
 // UB（tests/aliasing_ub.rs）
 let r: &u64 = unsafe { &*c.get() };      // ① 先建 &T
 w.set(2);                                 // ② 再写
@@ -259,7 +259,7 @@ assert_eq!(*r, 2);                        // ✅
 
 `PhantomData` 的职责，是把所有权或借用关系补回静态类型系统：
 
-```rust
+```rust,ignore
 pub struct SharedReadOnly<'a, T> {
     ptr: *const T,
     _p: PhantomData<&'a T>,                  // ← 类型层面借用了 &'a T
@@ -296,7 +296,7 @@ pub struct SharedReadWrite<'a, T> {
 但**把铸型点藏进一个函数、再用 `black_box` 挡住数据流**，
 rustc 的 lint 就抓不到了（`tests/aliasing_ub.rs`）：
 
-```rust
+```rust,ignore
 let r: &u64 = unsafe { &*c.get() };
 let p = black_box(r as *const u64 as *mut u64);
 unsafe { *p = 2 };      // ← rustc 不报，Miri 报
@@ -313,7 +313,7 @@ unsafe { *p = 2 };      // ← rustc 不报，Miri 报
 
 因为"两条指针不能重叠"这个规则**太强了**，会禁掉大量合法的代码：
 
-```rust
+```rust,ignore
 let v = 21u64;
 let (a, b) = unsafe { (&*p, &*p) };   // 两个共享引用指向同一处 —— 完全合法
 ```
@@ -350,7 +350,7 @@ let (a, b) = unsafe { (&*p, &*p) };   // 两个共享引用指向同一处 —�
 因为仅凭裸指针字段，类型系统无法推导 API 想表达的借用/所有权关系，
 特别是生命周期、variance、drop check 与 auto trait 行为。
 
-```rust
+```rust,ignore
 pub struct Handle { ptr: *mut u64 }                    // 丢了全部三样
 pub struct Handle<'a> { ptr: *mut u64, _p: PhantomData<&'a u64> }   // 补回来了
 ```
@@ -386,7 +386,7 @@ pub struct Handle<'a> { ptr: *mut u64, _p: PhantomData<&'a u64> }   // 补回来
 
 **不是。** 顺序决定一切（25.2.4）：
 
-```rust
+```rust,ignore
 // ❌ UB：&T 建立在前
 let r: &u64 = unsafe { &*c.get() };
 unsafe { *c.get() = 2 };
@@ -505,7 +505,7 @@ rustc --edition 2024 --crate-type=lib examples/ch25-aliasing/fail/write_through_
 用 `PhantomData` 影响生命周期、drop check、auto trait 与 variance；
 补错通常表现为静态类型属性错误，不能指望 Miri 自动诊断。
 
-```rust
+```rust,ignore
 // 若 Handle 在逻辑上借用 T，这里缺少生命周期关系
 struct Handle { p: *mut T }
 

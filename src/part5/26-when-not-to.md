@@ -20,7 +20,7 @@ profile，再决定是否值得承担长期的安全不变量。
 只有 profile 证明剩余检查确实显著，才把一个很小的读取函数改成 unsafe，
 并用属性测试、模糊测试和 Miri 覆盖边界。
 
-```rust
+```rust,ignore
 let payload = packet.get(header_len..declared_len)?;
 for chunk in payload.chunks_exact(8) { parse_word(chunk); }
 ```
@@ -318,7 +318,7 @@ LLVM 的 `-O` 里有专门的 pass 做这件事（`LoopVectorize` 依赖它、
 一个反直觉的实践建议：**`unsafe` 块应该尽可能小**，
 而且应该被**安全的前置检查**包住。
 
-```rust
+```rust,ignore
 // ❌ 大 unsafe 块：义务范围模糊
 pub unsafe fn f(v: &[u64], i: usize) -> u64 {
     unsafe {

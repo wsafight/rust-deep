@@ -2,7 +2,7 @@
 //!
 //! 复现：cargo test -p ch23-project-runtime
 
-use ch23_project_runtime::{block_on, count_to, run_local, run_three, Executor, YieldNow};
+use ch23_project_runtime::{Executor, YieldNow, block_on, count_to, run_local, run_three};
 use std::sync::{Arc, Mutex};
 
 /// ★ 三个任务按入队顺序各被 poll 一次，然后按入队顺序完成。
@@ -57,7 +57,10 @@ fn pending_without_wake_is_lost() {
 
     // `run` 会**立刻返回** —— 队列空了，但任务其实没完成
     exec.run();
-    assert!(!*done.lock().unwrap(), "任务被丢掉了（这正是本用例要证明的）");
+    assert!(
+        !*done.lock().unwrap(),
+        "任务被丢掉了（这正是本用例要证明的）"
+    );
 }
 
 /// 对照：`YieldNow` 调用了 waker，所以任务会回到队列并最终完成。

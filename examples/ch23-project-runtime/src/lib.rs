@@ -144,8 +144,7 @@ fn task_waker(task: &Arc<Task>) -> Waker {
         drop(unsafe { Arc::from_raw(data as *const Task) });
     }
 
-    static VTABLE: RawWakerVTable =
-        RawWakerVTable::new(clone, wake, wake_by_ref, drop_waker);
+    static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop_waker);
 
     let raw = Arc::into_raw(Arc::clone(task)) as *const ();
     // SAFETY: raw 来自 Arc::into_raw，vtable 的四个函数满足上面列出的契约。
@@ -178,7 +177,9 @@ pub struct Executor {
 
 impl Executor {
     pub fn new() -> Arc<Self> {
-        Arc::new(Self { ready: Mutex::new(VecDeque::new()) })
+        Arc::new(Self {
+            ready: Mutex::new(VecDeque::new()),
+        })
     }
 
     /// 把一个 future 变成任务并立刻入队。
@@ -217,7 +218,11 @@ impl Executor {
 }
 
 impl Default for Executor {
-    fn default() -> Self { Self { ready: Mutex::new(VecDeque::new()) } }
+    fn default() -> Self {
+        Self {
+            ready: Mutex::new(VecDeque::new()),
+        }
+    }
 }
 
 // ============================================================
@@ -257,11 +262,15 @@ pub struct YieldNow {
 }
 
 impl YieldNow {
-    pub fn new() -> Self { Self { yielded: false } }
+    pub fn new() -> Self {
+        Self { yielded: false }
+    }
 }
 
 impl Default for YieldNow {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Future for YieldNow {
@@ -335,6 +344,5 @@ pub fn run_three() -> Vec<u64> {
     }
 
     exec.run();
-    let out = order.lock().unwrap().clone();
-    out
+    order.lock().unwrap().clone()
 }

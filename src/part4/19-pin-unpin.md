@@ -23,7 +23,7 @@
 堆上的 future 本体。业务层通常只会看到 `Box::pin` 或宏生成的投影代码，
 但理解 Pin 能解释为什么某些 future 不能直接借成 `&mut T`。
 
-```rust
+```rust,ignore
 let request = Box::pin(read_response(socket));
 queue.push(request); // 队列移动的是 Pin<Box<_>>，不是 future 本体
 ```
@@ -40,7 +40,7 @@ queue.push(request); // 队列移动的是 Pin<Box<_>>，不是 future 本体
 
 `async fn` 的状态机里，一个跨 `await` 的局部变量**可以借用另一个**：
 
-```rust
+```rust,ignore
 pub async fn borrow_across_await() -> u64 {
     let x = String::from("hi");
     let r = &x;                     // ← r 借用 x
@@ -60,7 +60,7 @@ pub async fn borrow_across_await() -> u64 {
 
 **（A）你写了个自引用结构，它编译过了、也"跑对了"：**
 
-```rust
+```rust,ignore
 pub struct SelfRef {
     pub data: u64,
     self_ref: *mut u64,        // 指向自己的 data
@@ -74,7 +74,7 @@ pub struct SelfRef {
 
 **（B）你想把 future 钉住，编译器拒绝：**
 
-```rust
+```rust,ignore
 let mut f = borrow_across_await();
 let p: Pin<&mut _> = Pin::new(&mut f);   // ← 编译不过
 ```
@@ -111,7 +111,7 @@ error[E0277]: `{async fn body of borrow_across_await()}` cannot be unpinned
 
 先看一个真的能跑的自引用结构。`examples/ch19-pin/src/lib.rs`：
 
-```rust
+```rust,ignore
 pub struct SelfRef {
     pub data: u64,
     self_ref: *mut u64,     // 指向 self.data
@@ -211,7 +211,7 @@ coroutine layout {
 一个值能被移动，只有两条路：**拿到所有权**，或者**拿到 `&mut`**。
 `Pin` 把两条路同时堵死。`fail/move_pinned.rs`：
 
-```rust
+```rust,ignore
 pub fn try_get_mut(p: &mut Pin<Box<NotUnpin>>) {
     let inner: &mut NotUnpin = &mut *p;     // ① E0596
 }
@@ -242,7 +242,7 @@ error[E0507]: cannot move out of dereference of `Pin<Box<NotUnpin>>`
 
 ### 19.2.4 `Unpin` 是 auto trait，`PhantomPinned` 是零大小的开关
 
-```rust
+```rust,ignore
 pub struct NotUnpin { pub a: u64, _p: PhantomPinned }
 ```
 
@@ -266,7 +266,7 @@ note: required by a bound in `Pin::<Ptr>::new`
 
 ### 19.2.5 `Pin` 本身仍然零成本
 
-```rust
+```rust,ignore
 pub fn plain(x: &mut u64) -> u64 { *x }
 pub fn pinned(p: Pin<&mut u64>) -> u64 { *p }
 ```
@@ -347,7 +347,7 @@ Rust 没有运行时类型信息，也没有 GC。它选了另一个方向：
 
 **实测不是这样。**（`fail/future_not_unpin.rs`）
 
-```rust
+```rust,ignore
 pub async fn zero_await(a: u64) -> u64 { a }   // 没有借用、没有 await
 
 pub fn try_pin_future() {
@@ -384,7 +384,7 @@ error[E0277]: `{async fn body of zero_await()}` cannot be unpinned
 
 自引用指针有两种写法：
 
-```rust
+```rust,ignore
 this.self_ref = std::ptr::addr_of!(this.data);      // A
 this.self_ref = std::ptr::addr_of_mut!(this.data);  // B
 ```
@@ -427,7 +427,7 @@ this.self_ref = std::ptr::addr_of_mut!(this.data);  // B
 `Pin<Box<T>>` 保证的是"`Box` 指向的那块内存不会被释放或替换"，
 **不保证**"里面的字节不会被改"。
 
-```rust
+```rust,ignore
 let p: Pin<Box<NotUnpin>> = Box::pin(...);
 let q = p;   // ← 移动 Pin<Box<_>> 本身：完全合法
 ```
@@ -440,7 +440,7 @@ let q = p;   // ← 移动 Pin<Box<_>> 本身：完全合法
 
 ### 反直觉之四：`!Unpin` 不等于"危险"
 
-```rust
+```rust,ignore
 pub struct NotUnpin { pub a: u64, _p: PhantomPinned }
 ```
 
@@ -508,7 +508,7 @@ scripts/verify-miri.sh      # 5 条：ch25 两条 + ch19 两条 + 前置检查
 
 本章的 `make_self_ref` 里那两行 `unsafe` 是全书最典型的样本之一：
 
-```rust
+```rust,ignore
 let this: &mut SelfRef = unsafe { b.as_mut().get_unchecked_mut() };
 this.data = data;
 this.self_ref = std::ptr::addr_of_mut!(this.data);

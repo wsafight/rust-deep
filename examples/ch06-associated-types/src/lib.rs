@@ -21,13 +21,15 @@ pub struct Numbers(pub Vec<u64>);
 
 impl Container for Numbers {
     type Item = u64;
-    fn get(&self, i: usize) -> Option<&u64> { self.0.get(i) }
+    fn get(&self, i: usize) -> Option<&u64> {
+        self.0.get(i)
+    }
 }
 
 /// ★ 关联类型的好处：**调用点不需要类型标注**
 #[unsafe(no_mangle)]
 pub fn use_container(c: &Numbers) -> u64 {
-    *c.get(0).unwrap_or(&0)      // `Self::Item` 已经唯一确定
+    *c.get(0).unwrap_or(&0) // `Self::Item` 已经唯一确定
 }
 
 // ---------- 泛型参数：同一个类型可以实现多次 ----------
@@ -39,13 +41,19 @@ pub trait Conv<T> {
 pub struct Wrapper(pub u32);
 
 impl Conv<u64> for Wrapper {
-    fn conv(self) -> u64 { self.0 as u64 }
+    fn conv(self) -> u64 {
+        self.0 as u64
+    }
 }
 impl Conv<f64> for Wrapper {
-    fn conv(self) -> f64 { self.0 as f64 }
+    fn conv(self) -> f64 {
+        self.0 as f64
+    }
 }
 impl Conv<String> for Wrapper {
-    fn conv(self) -> String { self.0.to_string() }
+    fn conv(self) -> String {
+        self.0.to_string()
+    }
 }
 
 /// ★ 泛型参数的代价：**调用点常常需要类型标注**

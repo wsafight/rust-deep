@@ -14,9 +14,8 @@
 //!   编译器说的是"`g` maybe used later" —— 它数的是**变量的存活**，
 //!   不是**值的存活**。
 
-
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// 编译期断言：`F: Send`。**没有任何运行时开销** ——
 /// 它只在类型层做一次检查，然后消失。
@@ -50,7 +49,10 @@ pub async fn borrow_across_await() -> u64 {
 #[unsafe(no_mangle)]
 pub async fn borrow_not_across_await() -> u64 {
     let x = String::from("hi");
-    let n = { let r = &x; r.len() };
+    let n = {
+        let r = &x;
+        r.len()
+    };
     std::future::ready(()).await;
     n as u64
 }
@@ -81,6 +83,7 @@ pub async fn longest<'a>(x: &'a [u64], y: &'a [u64]) -> &'a u64 {
 /// 借用参数跨过 `await` —— 状态机字段就是那个引用。
 /// 这里的 `'a` 真的活在状态机里（对比 `longest`）。
 #[unsafe(no_mangle)]
+#[allow(clippy::needless_lifetimes)]
 pub async fn peek_across_await<'a>(v: &'a [u64]) -> u64 {
     let head = &v[0];
     std::future::ready(()).await;
@@ -104,14 +107,17 @@ pub async fn peek_across_await<'a>(v: &'a [u64]) -> u64 {
 /// 报错：`future returned by holds_guard_bad is not Send`，
 /// 并指出 `MutexGuard<'_, u64>` 不是 `Send`、以及"await occurs here,
 /// with `g` maybe used later"。
-
+///
 /// ★ **正确写法：把锁的作用域收进一个块**。
 ///
 /// 于是 `g` 的**存活区间**在 `await` 之前就结束了 ——
 /// 状态机的 `Suspend0` 变体里只有 `_s0: u64`，没有 `MutexGuard`。
 #[unsafe(no_mangle)]
 pub async fn holds_guard_good(m: &Mutex<u64>) -> u64 {
-    let v = { let g = m.lock().unwrap(); *g };
+    let v = {
+        let g = m.lock().unwrap();
+        *g
+    };
     std::future::ready(()).await;
     v
 }
@@ -130,7 +136,7 @@ pub async fn holds_guard_good(m: &Mutex<u64>) -> u64 {
 /// 因为编译器数的是**变量 `g` 的存活区间**，而不是**值的存活**。
 /// `drop(g)` 是一次使用，但它**没有缩短变量的存活区间**。
 /// 只有块作用域能。
-
+///
 /// 对照：`&AtomicU64` 是 `Send`（`AtomicU64: Sync`），所以能跨 `await`。
 #[unsafe(no_mangle)]
 pub async fn holds_atomic_ref(a: &AtomicU64) -> u64 {
@@ -169,16 +175,23 @@ pub fn check_send_good() {
 #[unsafe(no_mangle)]
 pub async fn inner_send_ok() -> u64 {
     let m = Mutex::new(1);
-    let v = { let g = m.lock().unwrap(); *g };
+    let v = {
+        let g = m.lock().unwrap();
+        *g
+    };
     std::future::ready(()).await;
     v
 }
 
 #[unsafe(no_mangle)]
-pub async fn outer_send_ok() -> u64 { inner_send_ok().await }
+pub async fn outer_send_ok() -> u64 {
+    inner_send_ok().await
+}
 
 #[unsafe(no_mangle)]
-pub fn check_send_outer() { assert_send(outer_send_ok()); }
+pub fn check_send_outer() {
+    assert_send(outer_send_ok());
+}
 
 // ============================================================
 // 5) Send 与 Sync 是**两个独立性质**（实测，见 fail/future_not_sync.rs）

@@ -26,12 +26,12 @@ pub fn spawn_share(a: Arc<u64>) -> u64 {
     r + *a
 }
 
-/// ★ 反例（类型层，编译不过）—— 见 `fail/` 目录：
-/// - `fail/not_send.rs`：`Rc<T>` 不能跨线程（`Rc` 不是 `Send`）
-/// - `fail/not_sync.rs`：`Cell<T>` 不能共享引用（`Cell` 不是 `Sync`）
-///
-/// 这两个反例证明：**检查在编译期，不在运行期**。
-/// 汇编里找不到任何痕迹 —— 因为编译失败的程序**根本没有汇编**。
+// ★ 反例（类型层，编译不过）—— 见 `fail/` 目录：
+// - `fail/not_send.rs`：`Rc<T>` 不能跨线程（`Rc` 不是 `Send`）
+// - `fail/not_sync.rs`：`Cell<T>` 不能共享引用（`Cell` 不是 `Sync`）
+//
+// 这两个反例证明：**检查在编译期，不在运行期**。
+// 汇编里找不到任何痕迹 —— 因为编译失败的程序**根本没有汇编**。
 
 /// 对照：同一个类型，加了 `unsafe impl Send` 就能过 ——
 /// 这说明 `Send` 是一个**可以被 unsafe 撒谎的标记**，
@@ -59,7 +59,7 @@ unsafe impl Send for MyBox {}
 #[unsafe(no_mangle)]
 pub fn spawn_mybox(b: MyBox) -> usize {
     let h = std::thread::spawn(move || {
-        let _ = &b;        // ← 强制捕获整个 MyBox（而不是只捕获 b.0）
+        let _ = &b; // ← 强制捕获整个 MyBox（而不是只捕获 b.0）
         b.0 as usize
     });
     h.join().unwrap()
@@ -158,7 +158,7 @@ pub fn spawn_safe_handle(h: SafeHandle<u64>) -> u64 {
 /// **捕获粒度决定了哪个类型被拿去检查 auto trait。**
 #[unsafe(no_mangle)]
 pub fn spawn_handle_field(h: Handle<u64>) -> u64 {
-    let h2 = std::thread::spawn(move || h.id);   // ← 只捕获 id
+    let h2 = std::thread::spawn(move || h.id); // ← 只捕获 id
     h2.join().unwrap()
 }
 
@@ -200,6 +200,6 @@ pub fn guard_is_sync(g: &std::sync::MutexGuard<'_, u64>) -> u64 {
 #[unsafe(no_mangle)]
 pub fn arc_needs_both(a: std::sync::Arc<u64>) -> u64 {
     let b = std::sync::Arc::clone(&a);
-    let h = std::thread::spawn(move || *b);   // 移动 Arc（要 Send）
-    h.join().unwrap() + *a                    // 共享 Arc（要 Sync）
+    let h = std::thread::spawn(move || *b); // 移动 Arc（要 Send）
+    h.join().unwrap() + *a // 共享 Arc（要 Sync）
 }

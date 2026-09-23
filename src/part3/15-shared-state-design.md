@@ -21,7 +21,7 @@
 维护局部统计，批次结束后归并。先判断是否必须共享，再决定同步原语，通常比
 先写 `Arc<Mutex<_>>` 更可靠。
 
-```rust
+```rust,ignore
 requests.fetch_add(1, Ordering::Relaxed); // 单字段统计
 stats.lock().unwrap().record(cost, now);  // 多字段不变量
 ```
@@ -32,7 +32,7 @@ stats.lock().unwrap().record(cost, now);  // 多字段不变量
 
 你要写一个多线程的计数器，很自然地写成：
 
-```rust
+```rust,ignore
 let counter = Arc::new(Mutex::new(0u64));
 let mut handles = vec![];
 for _ in 0..4 {
@@ -49,7 +49,7 @@ for _ in 0..4 {
 
 而如果换成 `AtomicU64`：
 
-```rust
+```rust,ignore
 let counter = Arc::new(AtomicU64::new(0));
 // ...
 counter.fetch_add(1, Ordering::Relaxed);
@@ -97,7 +97,7 @@ pub fn owned_sum(v: Vec<u64>) -> u64 {
 
 ### 15.2.2 设计 2：`Arc<T>` 只读共享 —— 一次原子加
 
-```rust
+```rust,ignore
 pub fn shared_read_sum(v: Arc<Vec<u64>>) -> u64 {
     let v2 = Arc::clone(&v);                    // ← 一次 ldadd
     let h = std::thread::spawn(move || v2.iter().fold(0u64, |a, b| a.wrapping_add(*b)));
@@ -117,7 +117,7 @@ pub fn shared_read_sum(v: Arc<Vec<u64>>) -> u64 {
 
 ### 15.2.3 设计 3：`Arc<Mutex<T>>` —— 真正需要共享可变时
 
-```rust
+```rust,ignore
 pub fn mutex_accumulate(a: Arc<Mutex<u64>>, n: u64) -> u64 {
     for _ in 0..n {
         let mut g = a.lock().unwrap();
@@ -165,7 +165,7 @@ LBB42_7:
 
 ### 15.2.4 设计 3'：同样的需求，用 atomic 就够了
 
-```rust
+```rust,ignore
 pub fn atomic_accumulate(a: Arc<AtomicU64>, n: u64) -> u64 {
     for _ in 0..n {
         a.fetch_add(1, Ordering::Relaxed);
@@ -202,7 +202,7 @@ LBB38_2:
 
 ### 15.2.5 设计 4：每线程一份 —— 零共享
 
-```rust
+```rust,ignore
 pub fn chunked_sum(v: &[u64]) -> u64 {
     let n = available_parallelism();
     let chunk = v.len().div_ceil(n).max(1);
@@ -316,7 +316,7 @@ error[E0277]: `Rc<RefCell<u64>>` cannot be sent between threads safely
 以前要在线程间共享数据，必须 `Arc`（因为 `spawn` 要求 `'static`）。
 `thread::scope` 之后，**借用**也能进线程：
 
-```rust
+```rust,ignore
 std::thread::scope(|s| {
     s.spawn(|| v.len());        // ← 直接借用 v，不需要 Arc
 });

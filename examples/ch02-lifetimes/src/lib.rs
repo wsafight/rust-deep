@@ -20,27 +20,40 @@ pub fn longest_elided<'a>(x: &'a str, y: &'a str) -> &'a str {
 
 /// ★ 生命周期擦除的直接证据：这两个函数的 LLVM IR / 汇编**逐字节相同**
 #[unsafe(no_mangle)]
-pub fn with_lifetime<'a>(x: &'a str) -> usize { x.len() }
+#[allow(clippy::needless_lifetimes)]
+pub fn with_lifetime<'a>(x: &'a str) -> usize {
+    x.len()
+}
 
 #[unsafe(no_mangle)]
-pub fn without_lifetime(x: &str) -> usize { x.len() }
+pub fn without_lifetime(x: &str) -> usize {
+    x.len()
+}
 
 /// 省略规则 1：只有一个输入生命周期 → 输出用它
 #[unsafe(no_mangle)]
-pub fn elide_one(x: &str) -> &str { x }
+pub fn elide_one(x: &str) -> &str {
+    x
+}
 
 /// 省略规则 2：有 `&self` → 输出用 `self` 的生命周期
-pub struct Parser<'a> { pub s: &'a str }
+pub struct Parser<'a> {
+    pub s: &'a str,
+}
 
 impl<'a> Parser<'a> {
     /// 省略成 `fn get<'s>(&'s self) -> &'s str`
     #[unsafe(no_mangle)]
-    pub fn get(&self) -> &str { self.s }
+    pub fn get(&self) -> &str {
+        self.s
+    }
 }
 
 /// 约束是**不等式**，不是时间轴：只要 `'b: 'a`（`'b` 比 `'a` 长）就成立
 #[unsafe(no_mangle)]
-pub fn outlives<'a, 'b: 'a>(x: &'a str, _y: &'b str) -> &'a str { x }
+pub fn outlives<'a, 'b: 'a>(x: &'a str, _y: &'b str) -> &'a str {
+    x
+}
 
 /// ★ 对照 `fail/over_annotated.rs`：**精确**标注 —— 输出只跟 `x` 绑。
 ///
@@ -50,7 +63,9 @@ pub fn outlives<'a, 'b: 'a>(x: &'a str, _y: &'b str) -> &'a str { x }
 /// **教训**：标注写得越紧（约束越多），求解空间越小，越容易被拒。
 /// 省略规则给出的通常就是最宽松的那个。
 #[unsafe(no_mangle)]
-pub fn precise<'a>(x: &'a str, _y: &str) -> &'a str { x }
+pub fn precise<'a>(x: &'a str, _y: &str) -> &'a str {
+    x
+}
 
 #[unsafe(no_mangle)]
 pub fn use_precise() -> &'static str {

@@ -24,7 +24,11 @@ pub struct RcNode {
 
 impl RcNode {
     pub fn new(value: u64) -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self { value, parent: None, children: Vec::new() }))
+        Rc::new(RefCell::new(Self {
+            value,
+            parent: None,
+            children: Vec::new(),
+        }))
     }
 
     pub fn add_child(parent: &Rc<RefCell<Self>>, value: u64) -> Rc<RefCell<Self>> {
@@ -64,19 +68,35 @@ struct ArenaNode {
 }
 
 impl Arena {
-    pub fn new() -> Self { Self { nodes: Vec::new() } }
+    pub fn new() -> Self {
+        Self { nodes: Vec::new() }
+    }
 
     pub fn add(&mut self, value: u64, parent: Option<NodeId>) -> NodeId {
         let id = NodeId(self.nodes.len());
-        self.nodes.push(ArenaNode { value, parent, children: Vec::new() });
+        self.nodes.push(ArenaNode {
+            value,
+            parent,
+            children: Vec::new(),
+        });
         if let Some(p) = parent {
             self.nodes[p.0].children.push(id);
         }
         id
     }
 
-    pub fn value(&self, id: NodeId) -> u64 { self.nodes[id.0].value }
-    pub fn parent(&self, id: NodeId) -> Option<NodeId> { self.nodes[id.0].parent }
+    pub fn value(&self, id: NodeId) -> u64 {
+        self.nodes[id.0].value
+    }
+    pub fn parent(&self, id: NodeId) -> Option<NodeId> {
+        self.nodes[id.0].parent
+    }
+}
+
+impl Default for Arena {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// 向上遍历：**纯整数运算**，没有引用计数、没有运行时借用检查

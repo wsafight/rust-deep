@@ -51,14 +51,14 @@ pub trait ContainerG<T> {
 
 你可能会说"看哪个更方便"。但有一个**硬性区别**：
 
-```rust
+```rust,ignore
 impl Container for Numbers { type Item = u64; ... }
 impl Container for Numbers { type Item = String; ... }   // ❌ E0119
 ```
 
 **关联类型版本不允许第二个实现。** 而泛型参数版本允许任意多个：
 
-```rust
+```rust,ignore
 impl ContainerG<u64>    for Numbers { ... }   // ✅
 impl ContainerG<String> for Numbers { ... }   // ✅
 ```
@@ -97,7 +97,7 @@ error[E0119]: conflicting implementations of trait `Container` for type `Numbers
 
 ### 6.2.2 泛型参数：三个 impl 都过
 
-```rust
+```rust,ignore
 impl Conv<u64>    for Wrapper { ... }
 impl Conv<f64>    for Wrapper { ... }
 impl Conv<String> for Wrapper { ... }
@@ -108,7 +108,7 @@ impl Conv<String> for Wrapper { ... }
 
 ### 6.2.3 代价：泛型参数带来推断歧义
 
-```rust
+```rust,ignore
 let w = Wrapper(5);
 let _y = w.conv();      // 要 u64 还是 f64？
 ```
@@ -128,13 +128,13 @@ help: consider giving `_y` an explicit type
 
 **E0283 是"泛型参数的税"。** 只要上下文能确定类型，就不用标注：
 
-```rust
+```rust,ignore
 pub fn conv_with_annotation(w: Wrapper) -> u64 { w.conv() }   // ✅
 ```
 
 但**关联类型完全不用交这个税**：
 
-```rust
+```rust,ignore
 pub fn use_container(c: &Numbers) -> u64 { *c.get(0).unwrap_or(&0) }   // ✅ 无需任何标注
 ```
 
@@ -166,7 +166,7 @@ _use_container:             ; 关联类型
 
 因为 `Self::Item` 会出现在**很多地方**，而不只是 trait 定义里：
 
-```rust
+```rust,ignore
 fn process<C: Container>(c: &C) -> Option<&C::Item> { c.get(0) }
 ```
 
@@ -200,7 +200,7 @@ pub trait Iterator {
 
 而 `IntoIterator` **同时**用了两种：
 
-```rust
+```rust,ignore
 pub trait IntoIterator {
     type Item;                                  // ← 关联类型：迭代出什么，唯一
     type IntoIter: Iterator<Item = Self::Item>; // ← 关联类型：变成哪个迭代器，唯一
@@ -236,7 +236,7 @@ where
 `I::Item` 出现在**两个位置**（返回类型、`Add` 的约束）。
 如果用泛型参数 `I: Iterator<T>`，你就得写：
 
-```rust
+```rust,ignore
 fn sum<T, I: Iterator<T>>(iter: I) -> T
 where T: Add<Output = T> + Default
 ```
@@ -247,7 +247,7 @@ where T: Add<Output = T> + Default
 
 ### 反直觉之二：`dyn` 只对关联类型"有要求"，对泛型参数没有
 
-```rust
+```rust,ignore
 trait A { type Item; fn get(&self) -> Self::Item; }
 trait B<T> { fn get(&self) -> T; }
 

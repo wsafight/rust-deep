@@ -44,7 +44,9 @@ pub struct Sum;
 
 impl Projection for Sum {
     type Out = u64;
-    fn project(&self, events: &[u64]) -> u64 { events.iter().sum() }
+    fn project(&self, events: &[u64]) -> u64 {
+        events.iter().sum()
+    }
 }
 
 /// 计数投影 —— 同一个 trait 的**另一个**实现。
@@ -55,14 +57,20 @@ pub struct Count;
 
 impl Projection for Count {
     type Out = usize;
-    fn project(&self, events: &[u64]) -> usize { events.len() }
+    fn project(&self, events: &[u64]) -> usize {
+        events.len()
+    }
 }
 
 #[unsafe(no_mangle)]
-pub fn use_sum(events: &[u64]) -> u64 { Sum.project(events) }
+pub fn use_sum(events: &[u64]) -> u64 {
+    Sum.project(events)
+}
 
 #[unsafe(no_mangle)]
-pub fn use_count(events: &[u64]) -> usize { Count.project(events) }
+pub fn use_count(events: &[u64]) -> usize {
+    Count.project(events)
+}
 
 // ============================================================
 // 第 2 步：`dyn` 版本 —— 第 7 章的判据
@@ -94,7 +102,9 @@ pub fn sum_dyn_exported(events: &[u64], p: &dyn Projection<Out = u64>) -> u64 {
 }
 
 #[unsafe(no_mangle)]
-pub fn use_dyn(events: &[u64]) -> u64 { sum_dyn(events, &Sum) }
+pub fn use_dyn(events: &[u64]) -> u64 {
+    sum_dyn(events, &Sum)
+}
 
 // ============================================================
 // 第 3 步：加一个"带 key"的投影 —— 逼出第 6 章的真正判据
@@ -114,10 +124,7 @@ pub fn use_dyn(events: &[u64]) -> u64 { sum_dyn(events, &Sum) }
 pub trait KeyedProjection {
     type Out<K>;
 
-    fn project_keyed<K: Clone + Eq + std::hash::Hash>(
-        &self,
-        events: &[(K, u64)],
-    ) -> Self::Out<K>;
+    fn project_keyed<K: Clone + Eq + std::hash::Hash>(&self, events: &[(K, u64)]) -> Self::Out<K>;
 }
 
 /// 实现：按 key 求和，返回 `HashMap<K, u64>`。
@@ -287,8 +294,12 @@ pub trait AllProjections {
 }
 
 impl<T> AllProjections for T {
-    fn project_all(&self, _events: &[u64]) -> u64 { 0 }
+    fn project_all(&self, _events: &[u64]) -> u64 {
+        0
+    }
 }
 
 #[unsafe(no_mangle)]
-pub fn use_all(events: &[u64]) -> u64 { Sum.project_all(events) }
+pub fn use_all(events: &[u64]) -> u64 {
+    Sum.project_all(events)
+}

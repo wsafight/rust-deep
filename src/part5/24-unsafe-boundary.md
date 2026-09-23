@@ -394,7 +394,7 @@ unsafe { v.push(4); }        // ← 照样 E0502
 
 `raw_double_add` 的签名是：
 
-```rust
+```rust,ignore
 pub unsafe fn raw_double_add(a: *mut i32, b: *const i32)
 ```
 

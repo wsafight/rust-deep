@@ -101,14 +101,19 @@ pub fn atomic_accumulate(a: Arc<AtomicU64>, n: u64) -> u64 {
 /// 代价：`thread::scope` 的创建开销 + 最后那次合并。
 #[unsafe(no_mangle)]
 pub fn chunked_sum(v: &[u64]) -> u64 {
-    let n = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+    let n = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
     let chunk = v.len().div_ceil(n).max(1);
     std::thread::scope(|s| {
         let handles: Vec<_> = v
             .chunks(chunk)
             .map(|c| s.spawn(move || c.iter().fold(0u64, |a, b| a.wrapping_add(*b))))
             .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).fold(0u64, u64::wrapping_add)
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap())
+            .fold(0u64, u64::wrapping_add)
     })
 }
 

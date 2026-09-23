@@ -21,7 +21,7 @@
 序列化热循环或数值内核则更适合泛型，让 LLVM 有机会内联和向量化。真实设计
 往往两者并用：系统边界用 `dyn` 保持可扩展，内部热路径转成具体类型或枚举。
 
-```rust
+```rust,ignore
 let plugins: Vec<Box<dyn Plugin>> = load_plugins();
 for plugin in &plugins { plugin.on_request(&request); }
 ```
@@ -33,7 +33,7 @@ for plugin in &plugins { plugin.on_request(&request); }
 
 你写了一个 trait，想拿它做 trait object：
 
-```rust
+```rust,ignore
 pub trait Cache {
     fn get(&self, key: &str) -> Option<String>;
     fn insert<T: ToString>(&mut self, key: &str, value: T);   // ← 泛型方法
@@ -152,7 +152,7 @@ vtable 里有 `size` 和 `align` 两个槽位，正是为了处理"大小未知"
 
 ### 7.2.4 三种分发方式的完整对照
 
-```rust
+```rust,ignore
 pub fn area_generic<T: Shape>(s: &T) -> f64 { s.area() }   // 泛型
 pub fn call_generic(s: &Sq) -> f64 { area_generic(s) }     // 调用点
 pub fn area_dyn(s: &dyn Shape) -> f64 { s.area() }         // dyn
@@ -266,7 +266,7 @@ pub trait Cache {
 
 ### 反直觉之二：`&dyn Trait` 是**胖指针**，`Box<dyn Trait>` 里那个 `Box` 也是
 
-```rust
+```rust,ignore
 size_of::<&dyn Shape>()    == 16    // 数据指针 + vtable 指针
 size_of::<Box<dyn Shape>>() == 16   // 同上
 ```
@@ -279,7 +279,7 @@ size_of::<Box<dyn Shape>>() == 16   // 同上
 
 ### 反直觉之三：`dyn` 是 `!Sized`，但 `Box<dyn T>` 是 `Sized`
 
-```rust
+```rust,ignore
 fn takes_dyn(x: dyn Shape);          // ❌ 编译不过：大小未知
 fn takes_ref(x: &dyn Shape);         // ✅
 fn takes_box(x: Box<dyn Shape>);     // ✅

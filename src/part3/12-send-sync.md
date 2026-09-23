@@ -21,7 +21,7 @@ Web 服务把闭包交给 worker 时，闭包捕获的所有状态都必须 `Sen
 不会自动让内部的 `Cell` 线程安全。编译错误通常会沿字段链指出真正阻塞
 `Send`/`Sync` 的那个成员。
 
-```rust
+```rust,ignore
 let config = Arc::new(load_config());
 std::thread::spawn({
     let config = Arc::clone(&config);
@@ -35,7 +35,7 @@ std::thread::spawn({
 
 你想把一个 `Rc` 送进另一个线程：
 
-```rust
+```rust,ignore
 use std::rc::Rc;
 
 let r = Rc::new(42u64);
@@ -54,7 +54,7 @@ note: required by a bound in `spawn`
 
 换个写法，用 `Cell` 想跨线程共享：
 
-```rust
+```rust,ignore
 use std::cell::Cell;
 
 let c = Cell::new(42u64);
@@ -78,7 +78,7 @@ error[E0277]: `Cell<u64>` cannot be shared between threads safely
 
 而下面这段**却能编译通过**：
 
-```rust
+```rust,ignore
 let c = Cell::new(42u64);
 let h = std::thread::spawn(move || c.get());     // ✅ Cell 是 Send！
 ```
@@ -180,7 +180,7 @@ error[E0277]: `Rc<u64>` cannot be sent between threads safely
 
 标准库对 `Sync` 的定义就是这个：
 
-```rust
+```rust,ignore
 impl<T: ?Sized + Sync> Send for &T {}
 ```
 
@@ -204,7 +204,7 @@ impl<T: ?Sized + Sync> Send for &T {}
 
 有。`MutexGuard<'_, T>`：
 
-```rust
+```rust,ignore
 pub fn guard_is_sync(g: &MutexGuard<'_, u64>) -> u64 { **g }   // ✅ 编译通过
 
 let g = m.lock().unwrap();
@@ -288,7 +288,7 @@ edition 2021 起，闭包做**精确捕获**（disjoint capture）：
 
 **修法**：强制捕获整个结构体。
 
-```rust
+```rust,ignore
 let h = std::thread::spawn(move || {
     let _ = &b;        // ← 强制捕获整个 MyBox
     b.0 as usize
@@ -305,7 +305,7 @@ let h = std::thread::spawn(move || {
 
 同一个机制的另一面：**`PhantomData` 里写什么，决定了整个类型是不是 `Send`。**
 
-```rust
+```rust,ignore
 pub struct Handle<T> {
     id: u64,
     _p: PhantomData<*const T>,      // ← 让 Handle<T> 变成 !Send + !Sync
@@ -348,7 +348,7 @@ note: required because it appears within the type `PhantomData<*const u64>`
 
 同一个机制，在 `Handle` 上反而是**好事**：
 
-```rust
+```rust,ignore
 pub struct Handle<T> { id: u64, _p: PhantomData<*const T> }   // 整体 !Send
 
 pub fn spawn_handle_field(h: Handle<u64>) -> u64 {
@@ -397,7 +397,7 @@ T: Send  ⟺  T 的所有字段都是 Send
 Rust 没有"共享"这个原语 —— 共享总是通过引用（或 `Arc`，但 `Arc` 内部也是引用）。
 所以"共享安全"必须定义为"**引用的转移安全**"：
 
-```rust
+```rust,ignore
 impl<T: ?Sized + Sync> Send for &T {}
 ```
 
@@ -419,7 +419,7 @@ edition 2021 的精确捕获是个**纯粹的改进**（减少不必要的借用
 
 12.0 里那个"一次行一次不行"的例子，答案就是这一条。
 
-```rust
+```rust,ignore
 let c = Cell::new(42u64);
 std::thread::spawn(move || c.get());                 // ✅ Cell: Send
 
@@ -462,7 +462,7 @@ std::thread::spawn(move || r.set(1));                // ❌ &Cell: !Send
 `PhantomData` 通常被理解成"占位符，让编译器以为我用了 `T`"。
 但在 auto trait 的语境里，它是**控制器**：
 
-```rust
+```rust,ignore
 PhantomData<*const T>      // → !Send + !Sync
 PhantomData<fn() -> T>     // → Send + Sync
 PhantomData<T>             // → 跟随 T

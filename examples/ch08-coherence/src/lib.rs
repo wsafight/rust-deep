@@ -24,11 +24,15 @@ pub trait MyDisplay {
 }
 
 impl MyDisplay for Vec<u64> {
-    fn my_fmt(&self) -> String { format!("{self:?}") }
+    fn my_fmt(&self) -> String {
+        format!("{self:?}")
+    }
 }
 
 impl MyDisplay for String {
-    fn my_fmt(&self) -> String { format!("str:{self}") }
+    fn my_fmt(&self) -> String {
+        format!("str:{self}")
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -51,7 +55,9 @@ impl std::fmt::Display for Wrapped {
 }
 
 #[unsafe(no_mangle)]
-pub fn use_wrapped() -> String { Wrapped(vec![1, 2, 3]).to_string() }
+pub fn use_wrapped() -> String {
+    Wrapped(vec![1, 2, 3]).to_string()
+}
 
 // ---------- blanket impl：合法的写法 ----------
 
@@ -62,7 +68,9 @@ pub trait MyDebug {
 }
 
 impl<T: MyDisplay> MyDebug for T {
-    fn my_debug(&self) -> String { format!("MyDebug({})", self.my_fmt()) }
+    fn my_debug(&self) -> String {
+        format!("MyDebug({})", self.my_fmt())
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -92,7 +100,9 @@ impl std::fmt::Display for Box<Local> {
 pub struct Tagged<T>(pub T);
 
 impl<T> From<T> for Tagged<T> {
-    fn from(t: T) -> Self { Tagged(t) }
+    fn from(t: T) -> Self {
+        Tagged(t)
+    }
 }
 
 #[unsafe(no_mangle)]

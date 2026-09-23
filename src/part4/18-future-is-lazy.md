@@ -21,7 +21,7 @@ future 则把“已经发送请求、等待 socket 就绪”的状态保存下�
 运行其他任务。收益来自高并发等待场景，不是把 CPU 密集函数简单标成
 `async`；CPU 重活仍应交给专用线程池。
 
-```rust
+```rust,ignore
 let (user, stock, price) = tokio::join!(
     load_user(id),
     load_stock(sku),
@@ -35,7 +35,7 @@ let (user, stock, price) = tokio::join!(
 
 你想在异步函数里打印点东西：
 
-```rust
+```rust,ignore
 let f = async {
     println!("hello");
 };
@@ -48,7 +48,7 @@ let f = async {
 
 换个写法也让人困惑：
 
-```rust
+```rust,ignore
 async fn fetch() -> u64 { 42 }
 
 fn main() {
@@ -81,7 +81,7 @@ fn main() {
 
 ### 18.2.1 `async fn` 的返回类型是"状态机"
 
-```rust
+```rust,ignore
 pub async fn two_awaits(a: u64, b: u64) -> u64 {
     let x = Ready(Some(a)).await;
     let y = Ready(Some(b)).await;
@@ -187,7 +187,7 @@ after poll:      N = 1
 
 ★ 这也解释了异步里最经典的陷阱：
 
-```rust
+```rust,ignore
 let _ = async { println!("hello"); };   // ← 什么都不会打印
 ```
 
@@ -196,7 +196,7 @@ let _ = async { println!("hello"); };   // ← 什么都不会打印
 
 ### 18.2.5 状态机的大小
 
-```rust
+```rust,ignore
 size_of_val(&two_awaits(1, 2))              // → 56
 size_of_val(&no_await(1))                   // → 16
 ```
@@ -212,7 +212,7 @@ size_of_val(&no_await(1))                   // → 16
 
 ★ 这解释了一个很多人踩过的坑：**`async fn` 不能递归**。
 
-```rust
+```rust,ignore
 async fn rec(n: u64) -> u64 {
     if n == 0 { 0 } else { rec(n - 1).await + 1 }   // ❌ 编译不过
 }
@@ -223,7 +223,7 @@ async fn rec(n: u64) -> u64 {
 
 ### 18.2.6 最小 executor
 
-```rust
+```rust,ignore
 pub fn block_on<F: Future>(f: F) -> F::Output {
     let mut f = Box::pin(f);
     let waker = noop_waker();
@@ -301,7 +301,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 
 ### 反直觉之一：调用 `async fn` **不执行任何代码**
 
-```rust
+```rust,ignore
 let f = fetch();     // 什么都没发生
 ```
 
@@ -312,7 +312,7 @@ MIR 里 `two_awaits` 的函数体**只有一条**构造状态机的语句。
 
 ★ 后果：
 
-```rust
+```rust,ignore
 let _ = async { do_important_thing(); };   // ← 永远不会执行
 ```
 
@@ -333,7 +333,7 @@ discriminant((*_31)) = 3;
 
 ### 反直觉之三：`async fn` 不能递归
 
-```rust
+```rust,ignore
 async fn rec(n: u64) -> u64 {
     if n == 0 { 0 } else { rec(n - 1).await + 1 }   // ❌
 }
@@ -361,7 +361,7 @@ error[E0733]: recursion in an async fn requires boxing
 
 ### 反直觉之四：没有 `await` 的 `async fn` 也有状态机表示
 
-```rust
+```rust,ignore
 async fn no_await(a: u64) -> u64 { a }
 ```
 
@@ -416,7 +416,7 @@ scripts/verify-all.sh ch18      # 11 条断言
 
 ★ `noop_waker` 里那段 `unsafe` 值得看一眼：
 
-```rust
+```rust,ignore
 const VTABLE: RawWakerVTable = RawWakerVTable::new(
     |_| RawWaker::new(std::ptr::null(), &VTABLE),
     |_| {}, |_| {}, |_| {},

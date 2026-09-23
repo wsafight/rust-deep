@@ -14,7 +14,10 @@ async fn main() {
         let c = Arc::clone(&counter);
         handles.push(tokio::spawn(async move {
             // ★ 块作用域：guard 必须在 await 之前 drop（第 20 章）
-            let cur = { let g = c.lock().unwrap(); *g };
+            let cur = {
+                let g = c.lock().unwrap();
+                *g
+            };
             tokio::task::yield_now().await;
             let mut g = c.lock().unwrap();
             *g = cur + 1;

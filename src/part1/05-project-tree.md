@@ -21,7 +21,7 @@ arena 把节点集中存进 `Vec<Node>`，节点关系用稳定的 `NodeId(usize
 又会让增删节点极其困难。arena + `NodeId` 把“地址关系”变成“数据关系”，
 还能在删除时加入 generation，避免旧 ID 意外指向复用后的新节点。
 
-```rust
+```rust,ignore
 let mut arena = Arena::new();
 let root = arena.add(1, None);
 let child = arena.add(2, Some(root));
@@ -34,7 +34,7 @@ assert_eq!(arena.parent(child), Some(root));
 
 你想写一棵树，每个节点能访问自己的父节点：
 
-```rust
+```rust,ignore
 struct Node {
     value: u64,
     parent: Option<???>,      // ← 这里填什么？
@@ -55,7 +55,7 @@ struct Node {
 
 ## 5.1 三条路线
 
-```rust
+```rust,ignore
 // 路线 1：共享所有权 + 运行时借用检查
 pub struct RcNode {
     value: u64,
@@ -125,7 +125,7 @@ LBB13_1:
 
 ### 5.2.2 结构体大小
 
-```rust
+```rust,ignore
 size_of::<RcNode>()    = 40    // value:8 + parent:8 + children:24
 size_of::<ArenaNode>() = 48    // value:8 + parent:16 + children:24
 ```
@@ -133,7 +133,7 @@ size_of::<ArenaNode>() = 48    // value:8 + parent:16 + children:24
 看起来 arena 更大？因为 **`Option<usize>` 是 16 字节**（没有 niche，
 需要额外的 tag 字节）。用 `u32` + 哨兵就能压回去：
 
-```rust
+```rust,ignore
 pub struct ArenaNode32 { value: u64, parent: u32, children: Vec<u32> }
 size_of::<ArenaNode32>() = 40    // u32::MAX 表示"没有父节点"
 ```
@@ -147,7 +147,7 @@ size_of::<ArenaNode32>() = 40    // u32::MAX 表示"没有父节点"
 
 ### 5.2.3 `Rc` 的循环引用问题
 
-```rust
+```rust,ignore
 let parent = RcNode::new(1);
 let child = RcNode::add_child(&parent, 2);
 ```
@@ -157,7 +157,7 @@ let child = RcNode::add_child(&parent, 2);
 
 修法是 `Weak`：
 
-```rust
+```rust,ignore
 pub parent: Option<Weak<RefCell<RcNode>>>,   // 不增加引用计数
 ```
 
@@ -209,7 +209,7 @@ pub parent: Option<Weak<RefCell<RcNode>>>,   // 不增加引用计数
 
 ### 反直觉之二：索引比引用"更强"，因为它不受生命周期约束
 
-```rust
+```rust,ignore
 // 引用版本：编译不过
 fn get_two<'a>(t: &'a Tree) -> (&'a Node, &'a Node) {
     (&t.left_child, &t.left_child)      // 借用检查器可能不满意

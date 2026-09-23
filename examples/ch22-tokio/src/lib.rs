@@ -66,7 +66,10 @@ pub async fn shared_counter(n: usize) -> u64 {
         let c = Arc::clone(&counter);
         handles.push(tokio::spawn(async move {
             // ★ 块作用域：guard 在 await 之前就 drop
-            let cur = { let g = c.lock().unwrap(); *g };
+            let cur = {
+                let g = c.lock().unwrap();
+                *g
+            };
             tokio::task::yield_now().await;
             let mut g = c.lock().unwrap();
             *g = cur + 1;
@@ -77,16 +80,15 @@ pub async fn shared_counter(n: usize) -> u64 {
         h.await.expect("task panicked");
     }
 
-    let total = *counter.lock().unwrap();
-    total
+    *counter.lock().unwrap()
 }
 
-/// ★ 反面：这样写**编译不过**（见 `fail/guard_across_await.rs`）——
-/// 锁守卫跨了 `await`。
-///
-/// 注意 tokio 的错误信息比裸 `spawn` **更清楚**：
-/// 它会说 "future cannot be sent between threads safely" 并指出
-/// `MutexGuard`（第 20 章实测过同样的措辞）。
+// ★ 反面：这样写**编译不过**（见 `fail/guard_across_await.rs`）——
+// 锁守卫跨了 `await`。
+//
+// 注意 tokio 的错误信息比裸 `spawn` **更清楚**：
+// 它会说 "future cannot be sent between threads safely" 并指出
+// `MutexGuard`（第 20 章实测过同样的措辞）。
 
 // ============================================================
 // 3) `'static` 的两种破法
@@ -106,17 +108,17 @@ pub fn spawn_shared(s: Arc<str>) -> tokio::task::JoinHandle<usize> {
     tokio::spawn(async move { s.len() })
 }
 
-/// ★ 不能做的事：借用局部变量（见 `fail/borrow_local.rs`）。
-///
-/// ```ignore
-/// pub async fn bad() {
-///     let v = vec![1u64, 2];
-///     tokio::spawn(async { v.len() });   // ← 借用 v，不是 'static
-/// }
-/// ```
-///
-/// 编译器会说 "borrowed data escapes outside of function"。
-/// 修法：`async move { v.len() }` —— **把所有权搬进去**。
+// ★ 不能做的事：借用局部变量（见 `fail/borrow_local.rs`）。
+//
+// ```ignore
+// pub async fn bad() {
+//     let v = vec![1u64, 2];
+//     tokio::spawn(async { v.len() });   // ← 借用 v，不是 'static
+// }
+// ```
+//
+// 编译器会说 "borrowed data escapes outside of function"。
+// 修法：`async move { v.len() }` —— **把所有权搬进去**。
 
 // ============================================================
 // 4) 阻塞代码：`spawn_blocking`（工程上最常踩的坑）
@@ -139,16 +141,16 @@ pub async fn blocking_work(data: Vec<u64>) -> u64 {
     .expect("blocking task panicked")
 }
 
-/// ★ 注意 `spawn_blocking` 的约束**不是** `Send + 'static` 的 future，
-/// 而是 `FnOnce() -> R + Send + 'static`：
-///
-/// | | `spawn` | `spawn_blocking` |
-/// |---|---|---|
-/// | 接受 | `Future + Send + 'static` | `FnOnce() -> R + Send + 'static` |
-/// | 跑在 | async worker | 阻塞线程池 |
-/// | 用于 | 异步 IO | CPU 密集 / 同步 IO |
-///
-/// ★ 两者的共同点是 **`Send + 'static`** —— 因为都会**跨线程、跨时间**。
+// ★ 注意 `spawn_blocking` 的约束**不是** `Send + 'static` 的 future，
+// 而是 `FnOnce() -> R + Send + 'static`：
+//
+// | | `spawn` | `spawn_blocking` |
+// |---|---|---|
+// | 接受 | `Future + Send + 'static` | `FnOnce() -> R + Send + 'static` |
+// | 跑在 | async worker | 阻塞线程池 |
+// | 用于 | 异步 IO | CPU 密集 / 同步 IO |
+//
+// ★ 两者的共同点是 **`Send + 'static`** —— 因为都会**跨线程、跨时间**。
 
 // ============================================================
 // 5) 一个反例：`!Send` 的值跨 await
@@ -238,4 +240,6 @@ where
 ///
 /// 这和第 18 章的 `block_on` 是同一个东西 ——
 /// 只是 tokio 的版本带线程池、IO 驱动、定时器驱动。
-pub fn demo() -> u64 { 4 }
+pub fn demo() -> u64 {
+    4
+}

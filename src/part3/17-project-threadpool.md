@@ -19,7 +19,7 @@ worker 通过 channel 取任务，线程池析构时先关闭发送端，再 joi
 复用线程。生产实现还必须明确队列上限、拒绝策略、panic 隔离和关闭超时。
 本章的无界队列适合解释所有权和关停顺序，不应直接当作生产线程池模板。
 
-```rust
+```rust,ignore
 pool.execute(move || resize(input, output));
 // Drop: 先关闭任务入口，再等待 worker 退出
 ```
@@ -30,7 +30,7 @@ pool.execute(move || resize(input, output));
 
 实现一个最小的线程池：
 
-```rust
+```rust,ignore
 let pool = ThreadPool::new(4);
 pool.execute(|| { /* 任务 */ });
 // pool 析构时，所有 worker 优雅退出
@@ -98,7 +98,7 @@ bb1: {
 
 ## 17.2 唯一的共享可变状态
 
-```rust
+```rust,ignore
 let (sender, receiver) = mpsc::channel::<Job>();
 let receiver = Arc::new(Mutex::new(receiver));   // ← 唯一的共享可变
 ```
@@ -123,7 +123,7 @@ _8 = Arc::<std::sync::Mutex<std::sync::mpsc::Receiver<Box<dyn FnOnce() + Send>>>
 
 ### ★ 锁的作用域：线程池最容易写错的地方
 
-```rust
+```rust,ignore
 loop {
     let msg = {
         let guard = receiver.lock().unwrap();   // ← 锁在这里获取
@@ -138,7 +138,7 @@ loop {
 
 **如果写成这样就是 bug：**
 
-```rust
+```rust,ignore
 // ❌ 所有任务串行化
 let guard = receiver.lock().unwrap();
 loop {
@@ -176,7 +176,7 @@ bb10: {
 
 ## 17.3 `Drop` 的顺序：本章最微妙的部分
 
-```rust
+```rust,ignore
 impl Drop for ThreadPool {
     fn drop(&mut self) {
         drop(self.sender.take());          // ① 关闭 channel

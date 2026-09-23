@@ -12,20 +12,20 @@
 
 // ---------- 1) 不用 GAT：表达不出"借出内部数据" ----------
 
-/// 想写一个"每次返回窗口"的迭代器。
-///
-/// 用普通关联类型只能写成这样 —— 而它**编译不过**（见 `fail/no_gat.rs`）：
-///
-/// ```rust,ignore
-/// pub trait LendingIter {
-///     type Item;
-///     fn next(&mut self) -> Option<Self::Item>;   // ← Item 不能借用 self
-/// }
-/// ```
-///
-/// 因为 `Item` 是**一个**固定类型，它不可能"随每次调用的生命周期变化"。
-/// 若 `Item = &'a [u64]`，那个 `'a` 必须来自**别处**（比如 struct 上的参数），
-/// 而不是 `&mut self` 的那个生命周期。
+// 想写一个"每次返回窗口"的迭代器。
+//
+// 用普通关联类型只能写成这样 —— 而它**编译不过**（见 `fail/no_gat.rs`）：
+//
+// ```rust,ignore
+// pub trait LendingIter {
+//     type Item;
+//     fn next(&mut self) -> Option<Self::Item>;   // ← Item 不能借用 self
+// }
+// ```
+//
+// 因为 `Item` 是**一个**固定类型，它不可能"随每次调用的生命周期变化"。
+// 若 `Item = &'a [u64]`，那个 `'a` 必须来自**别处**（比如 struct 上的参数），
+// 而不是 `&mut self` 的那个生命周期。
 
 // ---------- 2) GAT 版本：`Item` 成为 `'a` 的函数 ----------
 
@@ -152,8 +152,12 @@ pub struct Wrapper;
 impl Family for Wrapper {
     type Member<T> = Vec<T>;
 
-    fn wrap<T>(v: T) -> Vec<T> { vec![v] }
-    fn unwrap<T>(m: Vec<T>) -> T { m.into_iter().next().unwrap() }
+    fn wrap<T>(v: T) -> Vec<T> {
+        vec![v]
+    }
+    fn unwrap<T>(m: Vec<T>) -> T {
+        m.into_iter().next().unwrap()
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -186,7 +190,9 @@ pub struct Wrapper2;
 impl Family2 for Wrapper2 {
     type Member<T> = Vec<T>;
 
-    fn wrap<T>(v: T) -> Vec<T> { vec![v] }
+    fn wrap<T>(v: T) -> Vec<T> {
+        vec![v]
+    }
 }
 
 /// 对照用的 trait：注意它**没有**泛型参数，但成员类型是泛型的。

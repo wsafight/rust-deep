@@ -24,7 +24,7 @@ trait 中可以直接声明 `async fn get(&self) -> Value`。泛型调用时，�
 future 或使用辅助宏。若任务交给多线程 executor，返回 future 还必须是 `Send`。
 这三个约束应在 API 设计阶段一起决定。
 
-```rust
+```rust,ignore
 trait Store {
     fn get(&self, key: Key) -> impl Future<Output = Value> + Send;
 }
@@ -43,7 +43,7 @@ trait Store {
 
 你想定义一个异步的存储抽象：
 
-```rust
+```rust,ignore
 pub trait Store {
     async fn get(&self, k: u64) -> u64;
 }
@@ -61,7 +61,7 @@ warning: use of `async fn` in public traits is discouraged as auto trait
 
 你决定忽略它（`#![allow(async_fn_in_trait)]`），然后在服务端代码里：
 
-```rust
+```rust,ignore
 tokio::spawn(async move { store.get(1).await });
 ```
 
@@ -74,7 +74,7 @@ note: the trait bound `impl Future<Output = u64>: Send` is not satisfied
 
 再看第二个需求 —— 你想 `Box<dyn Store>`：
 
-```rust
+```rust,ignore
 pub fn make() -> Box<dyn Store> { Box::new(Mem) }
 ```
 
@@ -102,7 +102,7 @@ error[E0038]: the trait `Store` is not dyn compatible
 
 ### 21.2.1 病因：返回类型是**不透明的**
 
-```rust
+```rust,ignore
 pub trait Store {
     async fn get(&self, k: u64) -> u64;      // 返回什么类型？
 }
@@ -158,7 +158,7 @@ _use_store_mem:
 
 要 `dyn`，必须把返回类型**统一**成"胖指针"：
 
-```rust
+```rust,ignore
 pub trait StoreDyn {
     fn get(&self, k: u64) -> Box<dyn Future<Output = u64> + Send + '_>;
 }
@@ -168,7 +168,7 @@ pub trait StoreDyn {
 
 ★ 而且**不能直接 `.await`**（`fail/box_dyn_future_not_awaitable.rs`）：
 
-```rust
+```rust,ignore
 pub async fn use_dyn(s: &dyn StoreDyn) -> u64 {
     StoreDyn::get(s, 1).await      // ← E0277
 }
@@ -186,7 +186,7 @@ error[E0277]: `dyn Future<Output = u64>` cannot be unpinned
 
 修法是 `Box::into_pin`：
 
-```rust
+```rust,ignore
 let mut f = Box::into_pin(StoreDyn::get(s, 1));
 std::future::poll_fn(|cx| f.as_mut().poll(cx)).await
 ```
@@ -207,7 +207,7 @@ _use_store_dyn:
 
 ### 21.2.4 解法：RPITIT 手写 `+ Send`
 
-```rust
+```rust,ignore
 pub trait StoreSend {
     fn get(&self, k: u64) -> impl Future<Output = u64> + Send;
 }
@@ -215,7 +215,7 @@ pub trait StoreSend {
 
 **这次 `Send` 写进签名了**，调用点就能过：
 
-```rust
+```rust,ignore
 pub fn spawn_ok(s: &Mem) {
     assert_send(StoreSend::get(s, 1));   // ✅
 }
@@ -306,7 +306,7 @@ cannot be specified
 
 看 `fail/rpitit_send_at_impl.rs`：
 
-```rust
+```rust,ignore
 impl StoreSend for Bad {
     fn get(&self, k: u64) -> impl Future<Output = u64> + Send {
         async move {

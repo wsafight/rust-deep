@@ -24,7 +24,7 @@
 Release/Acquire 建立 happens-before。两者代码看起来只差一个枚举值，
 承诺的却是完全不同的数据可见关系。
 
-```rust
+```rust,ignore
 DATA.store(new_version, Ordering::Relaxed);
 READY.store(true, Ordering::Release);
 
@@ -40,7 +40,7 @@ Acquire 不是让 `READY`“读得更新”，而是让读到这次发布的线�
 
 你想写一个"停止标志"，让一个线程通知另一个线程退出：
 
-```rust
+```rust,ignore
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static STOP: AtomicBool = AtomicBool::new(false);

@@ -21,7 +21,7 @@
 这些地址就会失效。业务代码通常不手写自引用，而是通过 `Pin<Box<F>>`、
 框架提供的 pinned API 或投影库维护这个不变量。
 
-```rust
+```rust,ignore
 let future = Box::pin(read_response(socket));
 runtime.spawn(future); // 移动的是 Box 句柄，不是堆上的状态机
 ```
@@ -49,7 +49,7 @@ impl SelfRef {
 
 看起来没问题。但把它移一下：
 
-```rust
+```rust,ignore
 let a = SelfRef::new(*b"hello");
 let b = a;                  // ← 移动
 println!("{}", unsafe { *b.ptr });   // 读出来的是什么？
@@ -125,7 +125,7 @@ Rust 的 move **允许值换地址**，但编译器也可能消除实际拷贝�
 
 ### 4.2.2 `Pin` 是零成本的
 
-```rust
+```rust,ignore
 pub fn plain(x: &mut u64) -> u64 { *x }
 pub fn pinned(p: Pin<&mut u64>) -> u64 { *p }
 ```
@@ -188,7 +188,7 @@ error[E0277]: `PhantomPinned` cannot be unpinned
 
 因为 `Pin::new` 拿到的是 `&mut T`。而持有 `&mut T` 的人随时可以：
 
-```rust
+```rust,ignore
 std::mem::swap(&mut *pinned_ref, &mut other);   // 换走
 std::mem::replace(&mut *pinned_ref, new_value); // 替换
 std::ptr::read(&*pinned_ref);                   // 读走
@@ -199,7 +199,7 @@ std::ptr::read(&*pinned_ref);                   // 读走
 
 ### 4.2.4 要钉住 `!Unpin` 的值，必须先给它**稳定地址**
 
-```rust
+```rust,ignore
 pub fn box_pin(data: u64) -> Pin<Box<Pinned>> { Box::pin(Pinned::new(data)) }
 ```
 
@@ -226,7 +226,7 @@ _box_pin:
 
 ### 4.2.5 `Pin` 真的挡得住移动
 
-```rust
+```rust,ignore
 pub fn read_pinned(p: &Pin<Box<Pinned>>) -> u64 { p.data }        // ✅ 只读
 pub fn write_pinned(p: &mut Pin<Box<Pinned>>, v: u64) {
     // SAFETY: 只改 data，不移动整个 Pinned
@@ -278,7 +278,7 @@ Rust 选择了另一个方向：**不修，而是不许移**。
 `Pin` 约束的是安全代码通过指针能做什么，不是给内存施法。下面这种移动
 完全合法：
 
-```rust
+```rust,ignore
 let pinned: Pin<Box<Pinned>> = Box::pin(Pinned::new(1));
 let moved = pinned; // 移动 Pin<Box<_>> 句柄，堆上的 Pinned 没动
 ```
@@ -305,7 +305,7 @@ let moved = pinned; // 移动 Pin<Box<_>> 句柄，堆上的 Pinned 没动
 
 ### 反直觉之三：`!Unpin` 不等于"危险"
 
-```rust
+```rust,ignore
 struct Pinned { data: u64, _pin: PhantomPinned }
 ```
 
@@ -347,7 +347,7 @@ scripts/verify-all.sh ch04      # 6 条断言
 一旦你走 `unsafe`（`get_unchecked_mut`、`Pin::new_unchecked`），
 这个约定就落回**你**头上。
 
-```rust
+```rust,ignore
 // SAFETY: 我承诺不会移动这个值
 let mut_ref = unsafe { pinned.get_unchecked_mut() };
 ```

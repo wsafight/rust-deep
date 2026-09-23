@@ -14,23 +14,33 @@ use std::pin::Pin;
 
 /// ★ 证据 1：`Pin<&mut T>` 是零成本的
 #[unsafe(no_mangle)]
-pub fn plain(x: &mut u64) -> u64 { *x }
+pub fn plain(x: &mut u64) -> u64 {
+    *x
+}
 
 #[unsafe(no_mangle)]
-pub fn pinned(p: Pin<&mut u64>) -> u64 { *p }
+pub fn pinned(p: Pin<&mut u64>) -> u64 {
+    *p
+}
 
 /// ★ 证据 2：移动允许重定位（本样本在 MIR 里是一条 `move`）
-pub struct Big { pub a: [u64; 4] }
+pub struct Big {
+    pub a: [u64; 4],
+}
 
 #[unsafe(no_mangle)]
-pub fn mov_it(b: Big) -> Big { b }
+pub fn mov_it(b: Big) -> Big {
+    b
+}
 
 /// ★ 证据 3：`Unpin` 是 auto trait —— 普通类型自动实现
 ///
 /// `Pin::new` 要求 `T: Unpin`，所以下面这个能编译；
 /// 去掉 `Unpin`（见 `fail/pin_requires_unpin.rs`）就编译不过。
 #[unsafe(no_mangle)]
-pub fn pin_a_u64(x: &mut u64) -> Pin<&mut u64> { Pin::new(x) }
+pub fn pin_a_u64(x: &mut u64) -> Pin<&mut u64> {
+    Pin::new(x)
+}
 
 /// ★ 证据 4：`!Unpin` 的类型 —— `PhantomPinned` 是零大小的"类型层开关"
 ///
@@ -47,20 +57,29 @@ pub fn pin_a_u64(x: &mut u64) -> Pin<&mut u64> { Pin::new(x) }
 /// `Box::pin` 或 `pin!`。这正是"堆分配换地址稳定"的由来。
 pub struct Pinned {
     pub data: u64,
-    _pin: PhantomPinned,     // 零大小，但让类型变成 !Unpin
+    _pin: PhantomPinned, // 零大小，但让类型变成 !Unpin
 }
 
 impl Pinned {
-    pub fn new(data: u64) -> Self { Self { data, _pin: PhantomPinned } }
+    pub fn new(data: u64) -> Self {
+        Self {
+            data,
+            _pin: PhantomPinned,
+        }
+    }
 }
 
 /// 用 `Box::pin` 钉住 —— 堆上的地址不会因为栈帧移动而改变
 #[unsafe(no_mangle)]
-pub fn box_pin(data: u64) -> Pin<Box<Pinned>> { Box::pin(Pinned::new(data)) }
+pub fn box_pin(data: u64) -> Pin<Box<Pinned>> {
+    Box::pin(Pinned::new(data))
+}
 
 /// ★ 证据 5：`Pin` 真的挡得住"移动"—— 只能拿到 `&T`，拿不到 `&mut T`
 #[unsafe(no_mangle)]
-pub fn read_pinned(p: &Pin<Box<Pinned>>) -> u64 { p.data }
+pub fn read_pinned(p: &Pin<Box<Pinned>>) -> u64 {
+    p.data
+}
 
 /// 要拿 `&mut T`，必须 `unsafe` 并自己承诺"不会移动它"
 #[unsafe(no_mangle)]

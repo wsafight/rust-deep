@@ -41,7 +41,7 @@ worker 取任务 → 再次 poll          → 继续解析请求
 
 你写了一个最简单的 executor（第 18 章的版本）：
 
-```rust
+```rust,ignore
 pub fn block_on<F: Future>(f: F) -> F::Output {
     let mut f = Box::pin(f);
     let waker = Waker::noop();
@@ -59,7 +59,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 
 于是你想把它变成真正的 executor：多个任务、队列、唤醒。
 
-```rust
+```rust,ignore
 pub struct Executor {
     ready: Mutex<VecDeque<Arc<Task>>>,
 }
@@ -84,7 +84,7 @@ impl Executor {
 
 这是 executor 实现里最经典的 bug。而 `Task` 那个结构体还带来另一个问题：
 
-```rust
+```rust,ignore
 pub struct Task {
     future: Mutex<Option<Pin<Box<dyn Future<Output = ()> + Send>>>>,
     executor: Weak<Executor>,        // ← 为什么是 Weak 不是 Arc？
@@ -97,7 +97,7 @@ pub struct Task {
 
 最后一个问题：`waker` 是 `Waker` 类型，它的构造函数是 `unsafe` 的：
 
-```rust
+```rust,ignore
 unsafe { Waker::from_raw(RawWaker::new(data, &VTABLE)) }
 ```
 
@@ -131,7 +131,7 @@ unsafe { Waker::from_raw(RawWaker::new(data, &VTABLE)) }
 
 ### 23.2.2 `Task`：三个字段各有来历
 
-```rust
+```rust,ignore
 pub struct Task {
     future: Mutex<Option<Pin<Box<dyn Future<Output = ()> + Send>>>>,
     executor: Weak<Executor>,
@@ -156,7 +156,7 @@ pub struct Task {
 
 ### 23.2.3 ★ 刻意下潜的 `unsafe`：`RawWakerVTable` 的四个函数
 
-```rust
+```rust,ignore
 fn task_waker(task: &Arc<Task>) -> Waker {
     unsafe fn clone(data: *const ()) -> RawWaker { /* 增加引用计数 */ }
     unsafe fn wake(data: *const ()) { /* 消耗一个引用计数 */ }
@@ -200,7 +200,7 @@ Miri 可以在这些测试路径上发现由引用计数错误引起的泄漏或
 
 ### 23.2.4 在这个 executor 里，`wake` 的效果是入队
 
-```rust
+```rust,ignore
 fn wake_task(task: Arc<Task>) {
     if let Some(exec) = task.executor.upgrade() {
         exec.ready.lock().unwrap().push_back(task);
@@ -216,7 +216,7 @@ fn wake_task(task: Arc<Task>) {
 
 ### 23.2.5 `run`：最小调度循环只有几行
 
-```rust
+```rust,ignore
 pub fn run(&self) {
     loop {
         let Some(task) = self.ready.lock().unwrap().pop_front() else {
@@ -248,7 +248,7 @@ _run_three:
 
 ### 23.2.6 `YieldNow`：理解 waker 的最佳样本
 
-```rust
+```rust,ignore
 impl Future for YieldNow {
     type Output = ();
 
@@ -326,7 +326,7 @@ cargo run -p ch23-project-runtime
 
 ★ 这与第 22 章的结论**完全一致**：
 
-```rust
+```rust,ignore
 pub fn spawn<F>(self: &Arc<Self>, future: F)
 where F: Future<Output = ()> + Send + 'static
 ```
@@ -362,7 +362,7 @@ tokio 的 `spawn` 会返回 `JoinHandle`，你可以 `await` 它并加超时。
 
 ### 反直觉之二：`block_on` **不需要** `Send`
 
-```rust
+```rust,ignore
 pub fn block_on<F: Future>(f: F) -> F::Output { ... }
 ```
 
@@ -370,7 +370,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output { ... }
 
 实测（`run_local`）：
 
-```rust
+```rust,ignore
 pub fn run_local() -> u64 {
     block_on(async {
         let r = std::rc::Rc::new(21u64);      // !Send
@@ -386,7 +386,7 @@ pub fn run_local() -> u64 {
 
 ### 反直觉之三：`Weak` 在 executor 里不是可选的
 
-```rust
+```rust,ignore
 executor: Weak<Executor>,     // ← 不能是 Arc
 ```
 
@@ -479,7 +479,7 @@ scripts/verify-all.sh ch23      # 5 条断言
 
 因为四个函数的类型是裸的：
 
-```rust
+```rust,ignore
 unsafe fn clone(data: *const ()) -> RawWaker
 unsafe fn wake(data: *const ())
 ```

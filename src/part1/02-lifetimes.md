@@ -16,7 +16,7 @@
 
 配置中心常把完整配置拥有在 `Config` 中，对外返回零拷贝字段：
 
-```rust
+```rust,ignore
 fn endpoint<'a>(cfg: &'a Config, name: &str) -> Option<&'a str> {
     cfg.services.get(name).map(String::as_str)
 }
@@ -27,7 +27,7 @@ fn endpoint<'a>(cfg: &'a Config, name: &str) -> Option<&'a str> {
 
 ## 2.0 一个会让你卡住的例子
 
-```rust
+```rust,ignore
 fn longest(x: &str, y: &str) -> &str {
     if x.len() > y.len() { x } else { y }
 }
@@ -138,7 +138,7 @@ LLVM 认为它们是同一个函数。
 
 **例二：推断器临时起的名字。**
 
-```rust
+```rust,ignore
 impl<'a> Parser<'a> {
     pub fn get2(&self, other: &str) -> &str { other }
 }
@@ -161,7 +161,7 @@ error: lifetime may not live long enough
 
 **例三：错误信息本身就是一条不等式。**
 
-```rust
+```rust,ignore
 pub fn to_static<'a>(x: &'a str) -> &'static str { x }
 ```
 
@@ -190,7 +190,7 @@ error: lifetime may not live long enough
 但机制不是"编译器比较了两个长度"，而是"求解器找到了一个同时满足所有约束的值"。
 
 > 这个区别不是抠字眼。它解释了为什么下面这段能编译：
-> ```rust
+> ```rust,ignore
 > let s: &'static str = "literal";
 > let local = String::from("temp");
 > let r = longest(s, &local);      // 'a 被推断成 local 的生命周期
@@ -226,7 +226,7 @@ error: lifetime may not live long enough
 
 第三条是 `Parser::get` 能编译的原因：
 
-```rust
+```rust,ignore
 impl<'a> Parser<'a> {
     pub fn get(&self) -> &str { self.s }        // 输出跟 &self 走
 }
@@ -235,7 +235,7 @@ impl<'a> Parser<'a> {
 **而 `get2` 就失败**，因为规则 2 强行规定"输出跟 `&self`"，
 可函数体返回的却是 `other`：
 
-```rust
+```rust,ignore
 pub fn get2(&self, other: &str) -> &str { other }   // 报错
 ```
 
@@ -257,7 +257,7 @@ pub fn outlives<'a, 'b: 'a>(x: &'a str, _y: &'b str) -> &'a str { x }
 
 ### 反直觉之二：标注可以**缩短**一个引用的"使用寿命"
 
-```rust
+```rust,ignore
 let s: &'static str = "literal";
 let local = String::from("temp");
 let r = longest(s, &local);      // s 是 'static，但 'a 被推断成 local 的生命周期
@@ -283,7 +283,7 @@ fn precise<'a>(x: &'a str, _y: &str) -> &'a str { x }
 
 两个函数体完全一样。但用法不同：
 
-```rust
+```rust,ignore
 pub fn use_precise() -> &'static str {
     let local = String::from("temp");
     precise("static str", &local)     // ✅ 编译过：'a 求解成 'static

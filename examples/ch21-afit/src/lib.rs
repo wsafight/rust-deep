@@ -47,7 +47,9 @@ pub trait Store {
 pub struct Mem;
 
 impl Store for Mem {
-    async fn get(&self, k: u64) -> u64 { k }
+    async fn get(&self, k: u64) -> u64 {
+        k
+    }
 }
 
 /// 泛型调用 —— **单态化**，与普通泛型一样（第 7 章）。
@@ -78,31 +80,31 @@ pub async fn use_store_mem() -> u64 {
 // 2) ★ 核心问题：`async fn` 表达不了 `Send`
 // ============================================================
 
-/// ★ 这样写**编译不过**（见 `fail/afit_not_send.rs`）：
-///
-/// ```ignore
-/// pub trait StoreBad {
-///     async fn get(&self, k: u64) -> u64;
-/// }
-///
-/// pub async fn spawn_it<S: StoreBad + Send + Sync + 'static>(s: S) {
-///     // 要求返回的 future 是 Send —— 但 trait 没承诺过
-///     assert_send(async move { s.get(1).await });
-/// }
-/// ```
-///
-/// 报错：
-///
-/// ```text
-/// error: future cannot be sent between threads safely
-/// note: the trait bound `impl Future<Output = u64>: Send` is not satisfied
-/// ```
-///
-/// ★ **为什么？** 因为 `async fn` 的返回类型是**不透明的** ——
-/// trait 只承诺"它是一个 `Future`"，**没有承诺它是 `Send`**。
-///
-/// 而 `tokio::spawn` 恰恰要求 `F: Send + 'static`（第 22 章）。
-/// 所以"用 `async fn` 写 trait + `tokio::spawn`"这个组合**直接撞墙**。
+// ★ 这样写**编译不过**（见 `fail/afit_not_send.rs`）：
+//
+// ```ignore
+// pub trait StoreBad {
+//     async fn get(&self, k: u64) -> u64;
+// }
+//
+// pub async fn spawn_it<S: StoreBad + Send + Sync + 'static>(s: S) {
+//     // 要求返回的 future 是 Send —— 但 trait 没承诺过
+//     assert_send(async move { s.get(1).await });
+// }
+// ```
+//
+// 报错：
+//
+// ```text
+// error: future cannot be sent between threads safely
+// note: the trait bound `impl Future<Output = u64>: Send` is not satisfied
+// ```
+//
+// ★ **为什么？** 因为 `async fn` 的返回类型是**不透明的** ——
+// trait 只承诺"它是一个 `Future`"，**没有承诺它是 `Send`**。
+//
+// 而 `tokio::spawn` 恰恰要求 `F: Send + 'static`（第 22 章）。
+// 所以"用 `async fn` 写 trait + `tokio::spawn`"这个组合**直接撞墙**。
 
 /// ★ 解法一：**用 RPITIT 手写，把 `Send` 写进签名**。
 ///
@@ -114,6 +116,7 @@ pub trait StoreSend {
 }
 
 impl StoreSend for Mem {
+    #[allow(clippy::manual_async_fn)]
     fn get(&self, k: u64) -> impl Future<Output = u64> + Send {
         async move { k }
     }
@@ -127,13 +130,13 @@ pub fn spawn_ok(s: &Mem) {
     assert_send(StoreSend::get(s, 1));
 }
 
-/// ★ 解法一的代价：**每个实现都必须手写 `impl Future` 包装**，
-/// 而且**不能再用 `async fn` 简写**（`async fn` 没法写 `+ Send`）。
-///
-/// 这就是 `async fn in trait` 最尴尬的地方：
-/// **能用的时候不能用 `Send`，要用 `Send` 的时候不能用 `async fn`。**
+// ★ 解法一的代价：**每个实现都必须手写 `impl Future` 包装**，
+// 而且**不能再用 `async fn` 简写**（`async fn` 没法写 `+ Send`）。
+//
+// 这就是 `async fn in trait` 最尴尬的地方：
+// **能用的时候不能用 `Send`，要用 `Send` 的时候不能用 `async fn`。**
 
-/// ★ 解法二：**`Box<dyn Future>`** —— 回到 `dyn`，代价是一次堆分配。
+// ★ 解法二：**`Box<dyn Future>`** —— 回到 `dyn`，代价是一次堆分配。
 pub trait StoreDyn {
     fn get(&self, k: u64) -> Box<dyn Future<Output = u64> + Send + '_>;
 }
@@ -167,55 +170,55 @@ pub async fn use_store_dyn(s: &dyn StoreDyn) -> u64 {
 // 3) `dyn` 不兼容：AFIT 的 trait 建不出 vtable
 // ============================================================
 
-/// ★ 这样写**编译不过**（见 `fail/afit_not_dyn.rs`）：
-///
-/// ```ignore
-/// pub trait Store { async fn get(&self, k: u64) -> u64; }
-/// pub fn make() -> Box<dyn Store> { todo!() }
-/// ```
-///
-/// ```text
-/// error[E0038]: the trait `Store` is not dyn compatible
-///   = note: for a trait to be dyn compatible it needs to allow building a vtable
-/// ```
-///
-/// ★ **为什么？** vtable 是一张**固定布局**的函数指针表（第 7 章）。
-/// `async fn` 的返回类型对每个实现都**不同**（状态机类型不同）——
-/// 而 vtable 只能放"签名相同"的函数指针。
-///
-/// 也就是说：**AFIT 和 `dyn` 在根上就冲突**，
-/// 不是"还没实现"，是"按现在的 vtable 模型无法实现"。
-///
-/// 要 `dyn` 就必须回到 `Box<dyn Future>`（返回类型统一成"胖指针"）。
+// ★ 这样写**编译不过**（见 `fail/afit_not_dyn.rs`）：
+//
+// ```ignore
+// pub trait Store { async fn get(&self, k: u64) -> u64; }
+// pub fn make() -> Box<dyn Store> { todo!() }
+// ```
+//
+// ```text
+// error[E0038]: the trait `Store` is not dyn compatible
+//   = note: for a trait to be dyn compatible it needs to allow building a vtable
+// ```
+//
+// ★ **为什么？** vtable 是一张**固定布局**的函数指针表（第 7 章）。
+// `async fn` 的返回类型对每个实现都**不同**（状态机类型不同）——
+// 而 vtable 只能放"签名相同"的函数指针。
+//
+// 也就是说：**AFIT 和 `dyn` 在根上就冲突**，
+// 不是"还没实现"，是"按现在的 vtable 模型无法实现"。
+//
+// 要 `dyn` 就必须回到 `Box<dyn Future>`（返回类型统一成"胖指针"）。
 
 // ============================================================
 // 4) 与第 20 章的交叉：`Send` 检查点被前移
 // ============================================================
 
-/// ★ 用 RPITIT 写 `+ Send` 的一个**副作用**：
-/// `Send` 的检查发生在**实现处**，而不是调用点。
-///
-/// 下面是**编译不过**的（见 `fail/rpitit_send_at_impl.rs`）——
-/// 注意错误指向的是 `impl` 里那几行，而不是任何调用点：
-///
-/// ```ignore
-/// pub struct Bad;
-/// impl StoreSend for Bad {
-///     fn get(&self, k: u64) -> impl Future<Output = u64> + Send {
-///         async move {
-///             let r = std::rc::Rc::new(k);   // ← Rc: !Send
-///             std::future::ready(()).await;
-///             *r
-///         }
-///     }
-/// }
-/// ```
-///
-/// ★ 这是**好事**：第 20 章讲的那个"`Send` 沿 `.await` 传染、
-/// 报错位置离原因很远"的问题，在这里**被提前到了实现处**。
-///
-/// 代价是：实现者必须自己处理这个约束，
-/// 而 `async fn` 简写**给不了这个选择**。
+// ★ 用 RPITIT 写 `+ Send` 的一个**副作用**：
+// `Send` 的检查发生在**实现处**，而不是调用点。
+//
+// 下面是**编译不过**的（见 `fail/rpitit_send_at_impl.rs`）——
+// 注意错误指向的是 `impl` 里那几行，而不是任何调用点：
+//
+// ```ignore
+// pub struct Bad;
+// impl StoreSend for Bad {
+//     fn get(&self, k: u64) -> impl Future<Output = u64> + Send {
+//         async move {
+//             let r = std::rc::Rc::new(k);   // ← Rc: !Send
+//             std::future::ready(()).await;
+//             *r
+//         }
+//     }
+// }
+// ```
+//
+// ★ 这是**好事**：第 20 章讲的那个"`Send` 沿 `.await` 传染、
+// 报错位置离原因很远"的问题，在这里**被提前到了实现处**。
+//
+// 代价是：实现者必须自己处理这个约束，
+// 而 `async fn` 简写**给不了这个选择**。
 
 // ============================================================
 // 5) 一张对照表（本章结论）

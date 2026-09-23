@@ -70,7 +70,22 @@ rustup target add x86_64-apple-darwin
 ⚠️ 这只能**看代码**，不能运行 —— 但足以讲清
 `lock cmpxchg`（x86）与 `ldaddal`（AArch64）的对照（第 16 章）。
 
-## A.3 复现全书证据
+## A.3 本地 pre-commit 检查
+
+项目不接入 GitHub Actions；提交前检查通过本地 `pre-commit` hooks 完成。首次安装并对整个工作区执行一次：
+
+```bash
+python3 -m pip install pre-commit
+python3 -m pre_commit install
+python3 -m pre_commit run --all-files
+```
+
+配置文件是仓库根目录的 `.pre-commit-config.yaml`，包含 `rustfmt`、严格
+`clippy`、workspace 测试、mdBook doctest 和证据链验证。之后每次提交时，hooks
+会自动检查本次提交涉及的文件；需要手动重跑全部检查时，再执行
+`python3 -m pre_commit run --all-files`。
+
+## A.4 复现全书证据
 
 ```bash
 # 构建书
@@ -131,7 +146,7 @@ cargo expand -p ch22-tokio --bin ch22-tokio
 3. **`-Zunpretty=mir` 需要 nightly。**
    本书一律用 stable 的 `--emit=mir`，读者零额外安装。
 
-## A.4 平台差异清单
+## A.5 平台差异清单
 
 本书的主验证目标是 macOS / AArch64，但**书里的结论都标注了平台**。
 遇到差异的地方：
@@ -146,7 +161,7 @@ cargo expand -p ch22-tokio --bin ch22-tokio
 ★ 结论层面**没有平台差异**的部分（借用检查、生命周期、trait 解析、
 `Send`/`Sync`、`Pin`、别名规则）—— 那些是**语言语义**，与目标无关。
 
-## A.5 目录结构
+## A.6 目录结构
 
 | 路径 | 作用 |
 |---|---|

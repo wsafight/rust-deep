@@ -21,7 +21,7 @@ blanket impl。重点是学习先列需求，再选择抽象；不能把“最�
 投影层逐步加需求，展示何时应拆成两个 trait、何时保留泛型边界、何时把
 动态分发放到更外层。
 
-```rust
+```rust,ignore
 trait Projection {
     type Output;
     fn apply(&self, events: &[Event]) -> Self::Output;
@@ -92,7 +92,7 @@ _0 = <Count as Projection>::project(move _2, copy _1) -> [return: bb1, unwind co
 需求变了：投影器要能**运行时收集**（比如从配置里读出来），
 所以得能装进 `Vec<Box<dyn Projection<Out = u64>>>`。
 
-```rust
+```rust,ignore
 pub fn sum_dyn(events: &[u64], p: &dyn Projection<Out = u64>) -> u64 {
     p.project(events)
 }
@@ -128,7 +128,7 @@ __RNvCsrtIYgyWToU_3lib7sum_dyn:
 
 这是本章最有价值的一条实测结果。同一个 `sum_dyn`，在调用点类型已知时：
 
-```rust
+```rust,ignore
 #[unsafe(no_mangle)]
 pub fn use_dyn(events: &[u64]) -> u64 { sum_dyn(events, &Sum) }
 ```
@@ -198,7 +198,7 @@ error[E0038]: the trait `Projection` is not dyn compatible
 
 所以这里要 GAT：
 
-```rust
+```rust,ignore
 pub trait KeyedProjection {
     type Out<K>;
     fn project_keyed<K: Clone + Eq + Hash>(&self, events: &[(K, u64)]) -> Self::Out<K>;
@@ -294,7 +294,7 @@ error[E0597]: `doubled` does not live long enough
 
 需求：给**所有**实现了 `Projection` 的类型，自动提供"投影并计数"。
 
-```rust
+```rust,ignore
 pub trait Counted {
     fn project_count(&self, events: &[u64]) -> usize;
 }

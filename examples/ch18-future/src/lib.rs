@@ -121,7 +121,9 @@ pub fn size_of_two_awaits() -> usize {
 }
 
 /// 只有一个状态（没有 `await`）的 `async fn`。
-pub async fn no_await(a: u64) -> u64 { a }
+pub async fn no_await(a: u64) -> u64 {
+    a
+}
 
 #[unsafe(no_mangle)]
 pub fn size_of_no_await() -> usize {

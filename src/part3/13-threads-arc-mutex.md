@@ -21,7 +21,7 @@
 持锁时做慢 IO、用户回调或长计算；简单计数则优先考虑 atomic，避免把所有
 worker 串行化在一把锁上。
 
-```rust
+```rust,ignore
 let snapshot = Arc::clone(&config);       // 只读共享
 let mut stats = stats.lock().unwrap();    // 复合状态短暂独占
 stats.record(status, elapsed);
@@ -33,7 +33,7 @@ stats.record(status, elapsed);
 
 `Arc<T>` 是"多线程共享所有权"的标准工具。用起来很简单：
 
-```rust
+```rust,ignore
 let a = Arc::new(vec![1u64, 2, 3]);
 let b = Arc::clone(&a);           // ← 这里发生了什么？
 std::thread::spawn(move || b.len());
@@ -228,7 +228,7 @@ _try_lock_mutex:
 
 `rust-src` 里的实际代码（`library/std/src/sys/pal/unix/sync/mutex.rs`）：
 
-```rust
+```rust,ignore
 pub struct Mutex {
     inner: UnsafeCell<libc::pthread_mutex_t>,
 }
@@ -241,7 +241,7 @@ pub unsafe fn lock(self: Pin<&Self>) {
 
 ★ 源码里还有一段注释解释了锁类型的选择：
 
-```rust
+```rust,ignore
 // A pthread mutex initialized with PTHREAD_MUTEX_INITIALIZER will have
 // a type of PTHREAD_MUTEX_DEFAULT, which has undefined behavior if you
 // try to re-lock it from the same thread when you already hold a lock.
@@ -436,7 +436,7 @@ scripts/verify-all.sh ch13      # 5 条断言
 ★ 值得逐条对照的是 `Arc` 里那两个 `unsafe impl`
 （`rust-src` 的 `alloc/src/sync.rs`，**原文**）：
 
-```rust
+```rust,ignore
 unsafe impl<T: ?Sized + Sync + Send, A: Allocator + Send> Send for Arc<T, A> {}
 unsafe impl<T: ?Sized + Sync + Send, A: Allocator + Sync> Sync for Arc<T, A> {}
 ```

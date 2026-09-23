@@ -40,7 +40,7 @@ trait Cursor {
 
 你想写一个"按窗口滑动"的迭代器，数据是它**自己拥有**的：
 
-```rust
+```rust,ignore
 pub struct Chunks {
     data: Vec<u64>,
     i: usize,
@@ -145,7 +145,7 @@ pub trait LendingIter {
 
 实现：
 
-```rust
+```rust,ignore
 impl LendingIter for Chunks {
     type Item<'a> = &'a [u64] where Self: 'a;
 
@@ -237,7 +237,7 @@ _2 = <Wrapper as Family>::wrap::<u64>(copy _1) -> [return: bb1, unwind continue]
 
 同样表达"一族类型"，另一种写法是把参数放到 trait 上：
 
-```rust
+```rust,ignore
 pub trait Family2<T> { type Member; fn wrap(v: T) -> Self::Member; }
 
 impl<T> Family2<T> for Wrapper2 { type Member = Vec<T>; fn wrap(v: T) -> Vec<T> { vec![v] } }
@@ -375,7 +375,7 @@ trait 的 dyn compatibility 限制。因此 lending iterator 通常作为新的�
 
 这是 GAT 最容易被低估的代价。看 `Iterator` 的例子：
 
-```rust
+```rust,ignore
 // 用 GAT 写 lending iterator —— 表达力更强
 pub trait LendingIter { type Item<'a> where Self: 'a; fn next(&mut self) -> Option<Self::Item<'_>>; }
 

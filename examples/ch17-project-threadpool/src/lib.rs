@@ -65,7 +65,10 @@ impl ThreadPool {
             .map(|i| Worker::new(i, Arc::clone(&receiver)))
             .collect();
 
-        ThreadPool { workers, sender: Some(sender) }
+        ThreadPool {
+            workers,
+            sender: Some(sender),
+        }
     }
 
     /// 提交一个任务。
@@ -78,7 +81,11 @@ impl ThreadPool {
     {
         let job: Job = Box::new(f);
         // unwrap：如果所有 worker 都挂了，send 会失败
-        self.sender.as_ref().expect("线程池已关闭").send(job).unwrap();
+        self.sender
+            .as_ref()
+            .expect("线程池已关闭")
+            .send(job)
+            .unwrap();
     }
 }
 
@@ -102,7 +109,9 @@ impl Worker {
                 }
             }
         });
-        Worker { handle: Some(handle) }
+        Worker {
+            handle: Some(handle),
+        }
     }
 }
 
@@ -146,10 +155,10 @@ pub fn pool_sum(n_workers: usize, data: Vec<u64>) -> u64 {
             tx.send(s).unwrap();
         });
     }
-    drop(tx);       // ★ 必须 drop 掉主线程这份，否则 rx 永远不结束
+    drop(tx); // ★ 必须 drop 掉主线程这份，否则 rx 永远不结束
 
     let total = rx.iter().fold(0u64, |a, b| a.wrapping_add(b));
-    drop(pool);     // ← 这里会走 Drop：先关 channel，再 join
+    drop(pool); // ← 这里会走 Drop：先关 channel，再 join
     total
 }
 
@@ -179,5 +188,8 @@ pub fn spawn_per_task(data: Vec<u64>) -> u64 {
             std::thread::spawn(move || c.iter().fold(0u64, |a, b| a.wrapping_add(*b)))
         })
         .collect();
-    handles.into_iter().map(|h| h.join().unwrap()).fold(0u64, u64::wrapping_add)
+    handles
+        .into_iter()
+        .map(|h| h.join().unwrap())
+        .fold(0u64, u64::wrapping_add)
 }

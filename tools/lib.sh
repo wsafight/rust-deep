@@ -59,9 +59,9 @@ rd_extern_args() {
   local f="examples/$name/externs"
   [[ -f "$f" ]] || return 0
   # 先确保依赖已构建（否则找不到 .rlib）
-  cargo build -q -p "$name" 2>/dev/null || true
+  cargo build --locked -q -p "$name" 2>/dev/null || true
   local json
-  json=$(cargo build -q -p "$name" --message-format=json 2>/dev/null) || return 0
+  json=$(cargo build --locked -q -p "$name" --message-format=json 2>/dev/null) || return 0
   # ★ 传递依赖也要给：rustc 直接调时需要能解析 tokio 的全部依赖
   #   （cargo 会自动做这件事，裸 rustc 不会）
   local -a wanted=()

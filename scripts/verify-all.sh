@@ -21,7 +21,7 @@ section "编译 examples"
 for dir in examples/*/; do
   name=$(basename "$dir")
   [[ -n "$filter" && "$name" != *"$filter"* ]] && continue
-  if cargo build -q -p "$name" 2>/tmp/rd-build-err; then
+  if cargo build --locked -q -p "$name" 2>/tmp/rd-build-err; then
     ok "cargo build -p $name"
   else
     bad "cargo build -p ${name}"

@@ -43,7 +43,11 @@ pub struct Cell2<T> {
 }
 
 impl<T: Copy> Cell2<T> {
-    pub fn new(v: T) -> Self { Self { inner: UnsafeCell::new(v) } }
+    pub fn new(v: T) -> Self {
+        Self {
+            inner: UnsafeCell::new(v),
+        }
+    }
 
     pub fn get(&self) -> T {
         // SAFETY: UnsafeCell 保证通过共享引用修改是允许的；
@@ -92,11 +96,16 @@ pub fn mut_roundtrip(v: u64) -> u64 {
 /// `new` 收到的真实 `&'a T`；Miri 按这个来源和后续访问判断是否合法。
 pub struct SharedReadOnly<'a, T> {
     ptr: *const T,
-    _p: PhantomData<&'a T>,     // ← 零大小，表达外层类型借用了 &'a T
+    _p: PhantomData<&'a T>, // ← 零大小，表达外层类型借用了 &'a T
 }
 
 impl<'a, T: Copy> SharedReadOnly<'a, T> {
-    pub fn new(r: &'a T) -> Self { Self { ptr: r, _p: PhantomData } }
+    pub fn new(r: &'a T) -> Self {
+        Self {
+            ptr: r,
+            _p: PhantomData,
+        }
+    }
 
     pub fn get(&self) -> T {
         // SAFETY: ptr 来自 &'a T，且在 'a 内有效
@@ -119,7 +128,10 @@ pub struct SharedReadWrite<'a, T> {
 
 impl<'a, T: Copy> SharedReadWrite<'a, T> {
     pub fn new(r: &'a UnsafeCell<T>) -> Self {
-        Self { ptr: r.get(), _p: PhantomData }
+        Self {
+            ptr: r.get(),
+            _p: PhantomData,
+        }
     }
 
     pub fn get(&self) -> T {
@@ -158,7 +170,7 @@ impl<'a, T: Copy> SharedReadWrite<'a, T> {
 pub fn write_then_read(v: u64) -> u64 {
     let c = UnsafeCell::new(v);
     let w = SharedReadWrite::new(&c);
-    w.set(v + 1);                       // ← 先写
+    w.set(v + 1); // ← 先写
     let r: &u64 = unsafe { &*c.get() }; // ← 后建 &T
     *r
 }

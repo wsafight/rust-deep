@@ -7,7 +7,7 @@
 //!   cargo +nightly miri test -p ch19-pin --test selfref      # 必须通过
 //!   cargo +nightly miri test -p ch19-pin --test selfref_ub   # 必须失败
 
-use ch19_pin::{make_self_ref, read_self_ref, SelfRef};
+use ch19_pin::{SelfRef, make_self_ref, read_self_ref};
 
 /// ★ 核心：自引用结构**不移动就正确**。
 ///

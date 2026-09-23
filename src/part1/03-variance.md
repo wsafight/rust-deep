@@ -17,7 +17,7 @@ variance 不是新关键字，而是泛型类型对生命周期或类型参数�
 
 事件系统可能保存一个能处理**任意短期请求引用**的回调：
 
-```rust
+```rust,ignore
 type Handler = for<'a> fn(&'a Request);
 ```
 
@@ -36,7 +36,7 @@ let r: &str = s;                     // ✅ 长的当短的用，没问题
 
 再看这个：
 
-```rust
+```rust,ignore
 let mut s: &'static str = "literal";
 let local = String::from("temp");
 let r: &mut &str = &mut s;
@@ -47,7 +47,7 @@ let r: &mut &str = &mut s;
 
 再换一个：
 
-```rust
+```rust,ignore
 let c: Cell<&'static str> = Cell::new("literal");
 c.set(&local);                       // ❌ 同样报错
 ```
@@ -87,7 +87,7 @@ c.set(&local);                       // ❌ 同样报错
 
 ### 3.2.2 最干净的一组对照
 
-```rust
+```rust,ignore
 use std::cell::Cell;
 
 pub struct CovHolder<'a> { pub r: &'a str }        // 协变
@@ -186,7 +186,7 @@ error[E0308]: mismatched types
 **最容易搞混的是 `&'a mut T`**：它在 `'a` 上**是协变的**，
 "不变"说的是 `T`。所以：
 
-```rust
+```rust,ignore
 &mut &'static str   不能当→   &mut &'a str      // T 位置，不变
 &'a mut u64         可以当→   &'short mut u64   // 'a 位置，协变
 ```
@@ -237,7 +237,7 @@ Rust 的类型系统要保证的核心性质是：
 大多数人第一次听到"`&mut` 是不变的"会以为整个类型都不变。
 不是。`&'a mut T` 在 `'a` 上协变，只有 `T` 不变。
 
-```rust
+```rust,ignore
 fn shrink<'a, 's: 'a>(x: &'a mut u64) -> &'s mut u64 { x }   // ✅ 合法
 ```
 
@@ -245,7 +245,7 @@ fn shrink<'a, 's: 'a>(x: &'a mut u64) -> &'s mut u64 { x }   // ✅ 合法
 
 ### 反直觉之二：加了 `PhantomData` 反而让类型**更**受限
 
-```rust
+```rust,ignore
 struct A<'a> { r: &'a str }                          // 协变：宽松
 struct B<'a> { r: &'a str, _p: PhantomData<Cell<&'a ()>> }   // 不变：严格
 ```
@@ -302,7 +302,7 @@ scripts/verify-all.sh ch03      # 7 条断言
 
 variance 是**类型层**的健全性保证。`unsafe` 可以绕过它：
 
-```rust
+```rust,ignore
 // 用 transmute 把 'static 变成 'short（或反过来）
 let short: &'short str = unsafe { std::mem::transmute::<&'static str, &'short str>(long) };
 ```

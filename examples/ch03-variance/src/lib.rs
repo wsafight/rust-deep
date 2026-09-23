@@ -16,10 +16,14 @@ use std::cell::Cell;
 // ---------- 三种 variance 的载体 ----------
 
 /// **协变**：`&'a str` 在 `'a` 上协变（'static 可以当 'short 用）
-pub struct CovHolder<'a> { pub r: &'a str }
+pub struct CovHolder<'a> {
+    pub r: &'a str,
+}
 
 /// **不变**：`Cell<&'a str>` 在 `'a` 上不变（Cell 内部可写）
-pub struct InvHolder<'a> { pub c: Cell<&'a str> }
+pub struct InvHolder<'a> {
+    pub c: Cell<&'a str>,
+}
 
 /// **逆变**的载体：函数指针的参数位置
 pub type TakesStatic = fn(&'static str) -> usize;
@@ -35,7 +39,9 @@ pub fn cov_ok() -> usize {
     same_cov(h, &local)
 }
 
-fn same_cov<'s>(h: CovHolder<'s>, s: &'s str) -> usize { h.r.len() + s.len() }
+fn same_cov<'s>(h: CovHolder<'s>, s: &'s str) -> usize {
+    h.r.len() + s.len()
+}
 
 // ---------- 逆变：fn(&'long) 可以当 fn(&'short) 用 ----------
 
@@ -44,10 +50,16 @@ fn same_cov<'s>(h: CovHolder<'s>, s: &'s str) -> usize { h.r.len() + s.len() }
 /// `fn(&'a str)` 是 `fn(&'static str)` 的**子类型**：
 /// 能接受任意短期引用的函数，当然能胜任“只会收到 `'static`”的位置。
 #[unsafe(no_mangle)]
-pub fn contrav_ok() -> usize { apply_static(any_lifetime) }
+pub fn contrav_ok() -> usize {
+    apply_static(any_lifetime)
+}
 
-fn apply_static(f: TakesStatic) -> usize { f("y") }
-fn any_lifetime<'a>(s: &'a str) -> usize { s.len() }
+fn apply_static(f: TakesStatic) -> usize {
+    f("y")
+}
+fn any_lifetime(s: &str) -> usize {
+    s.len()
+}
 
 // ---------- 不变：&mut T 在 T 上不变 ----------
 
@@ -62,4 +74,6 @@ pub fn mut_invariant_ok() -> usize {
     s.len()
 }
 
-fn overwrite<'a>(dst: &mut &'a str, src: &'a str) { *dst = src; }
+fn overwrite<'a>(dst: &mut &'a str, src: &'a str) {
+    *dst = src;
+}

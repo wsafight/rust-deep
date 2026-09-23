@@ -21,7 +21,7 @@ channel 可以看成一条**所有权传送带**：消息放上去以后，发�
 请求。消费者独占事件，不需要和生产者共享 `&mut LogEvent`。若流量可能超过
 写入能力，应使用有界 channel 明确背压；无界 channel 只把拥塞转化成内存增长。
 
-```rust
+```rust,ignore
 let (tx, rx) = std::sync::mpsc::sync_channel::<LogEvent>(1024);
 tx.send(event)?; // 队列满时阻塞，压力不会无限变成内存占用
 ```
@@ -30,7 +30,7 @@ tx.send(event)?; // 队列满时阻塞，压力不会无限变成内存占用
 
 ## 14.0 一个会让你卡住的例子
 
-```rust
+```rust,ignore
 use std::sync::mpsc;
 
 let (tx, rx) = mpsc::channel::<String>();
@@ -62,7 +62,7 @@ help: consider cloning the value if the performance cost is acceptable
 
 对比一下，`Arc` 版本就完全不一样：
 
-```rust
+```rust,ignore
 let s = Arc::new(String::from("hello"));
 tx.send(Arc::clone(&s)).unwrap();
 println!("{s}");          // ✅ 编译通过
@@ -87,7 +87,7 @@ println!("{s}");          // ✅ 编译通过
 
 ### 14.2.1 `send_string` 的 MIR
 
-```rust
+```rust,ignore
 pub fn send_string() -> usize {
     let (tx, rx) = mpsc::channel::<String>();
     let s = String::from("hello");
@@ -128,7 +128,7 @@ bb3: {
 
 ### 14.2.2 对照：先借用原 `Arc` 做 clone，再移动新句柄
 
-```rust
+```rust,ignore
 pub fn send_arc() -> usize {
     let s = Arc::new(String::from("hello"));
     tx.send(Arc::clone(&s)).unwrap();
@@ -223,7 +223,7 @@ __RNvMs0_NtNtNtCs82bWklYMk3w_3std4sync4mpmc5wakerNtB5_9SyncWaker10disconnect
 
 ### 14.2.5 `Send` 检查在编译期（呼应第 12 章）
 
-```rust
+```rust,ignore
 pub fn send_across_thread() -> usize {
     let (tx, rx) = mpsc::channel::<Vec<u64>>();
     let h = thread::spawn(move || {
@@ -301,7 +301,7 @@ error[E0277]: `std::sync::mpsc::Receiver<u64>` cannot be shared between threads 
 
 ### 反直觉之一：`send` 是 `&self`，但拿走了 `T`
 
-```rust
+```rust,ignore
 pub fn send(&self, t: T) -> Result<(), SendError<T>>
 ```
 
@@ -317,7 +317,7 @@ pub fn send(&self, t: T) -> Result<(), SendError<T>>
 
 ### 反直觉之二：`send` 的返回值里有 `T`
 
-```rust
+```rust,ignore
 pub fn send(&self, t: T) -> Result<(), SendError<T>>
 ```
 

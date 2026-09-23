@@ -22,7 +22,7 @@ future 变成 `!Send`，还会把临界区延长到不可控的 IO 时间。正�
 在小块作用域内复制所需数据并释放锁，再执行异步调用；若确实需要异步锁，
 也要重新审视是否应该跨 await 持锁。
 
-```rust
+```rust,ignore
 let user_id = { state.lock().unwrap().user_id };
 let profile = client.fetch_user(user_id).await;
 ```
@@ -38,7 +38,7 @@ let profile = client.fetch_user(user_id).await;
 
 你在异步函数里加锁：
 
-```rust
+```rust,ignore
 use std::sync::Mutex;
 
 pub async fn holds_guard(m: &Mutex<u64>) -> u64 {
@@ -71,7 +71,7 @@ note: future is not `Send` as this value is used across an await
 
 > "那我在 `await` 之前把它 `drop` 掉不就行了？"
 
-```rust
+```rust,ignore
 let g = m.lock().unwrap();
 let v = *g;
 drop(g);                        // ← 用完了，显式释放
@@ -84,7 +84,7 @@ std::future::ready(()).await;
 
 这是本章要拆开的第一个谜。第二个谜紧接着来：
 
-```rust
+```rust,ignore
 let v = { let g = m.lock().unwrap(); *g };   // ← 只是换成了块作用域
 std::future::ready(()).await;
 v
@@ -111,7 +111,7 @@ v
 
 `examples/ch20-async-lifetimes/src/lib.rs` 里有两个只差一行位置的函数：
 
-```rust
+```rust,ignore
 // A：借用跨过 await
 pub async fn borrow_across_await() -> u64 {
     let x = String::from("hi");
@@ -168,7 +168,7 @@ coroutine layout {
 
 `async fn` 的参数/返回生命周期规则和第 2 章**完全一样**：
 
-```rust
+```rust,ignore
 pub async fn first(v: &[u64]) -> &u64 { ... }              // ✅ 单输入，省略规则可推
 pub async fn longest<'a>(x: &'a [u64], y: &'a [u64]) -> &'a u64 { ... }   // 必须显式
 ```
@@ -227,7 +227,7 @@ note: future is not `Send` as this value is used across an await
 
 `fail/send_contagion.rs`：
 
-```rust
+```rust,ignore
 pub async fn inner(m: &Mutex<u64>) -> u64 {
     let g = m.lock().unwrap();
     std::future::ready(()).await;
@@ -299,7 +299,7 @@ fn outer_send_ok() -> {async fn body of outer_send_ok()} {
 
 看这段（`fail/drop_does_not_help.rs`）：
 
-```rust
+```rust,ignore
 let g = m.lock().unwrap();
 let v = *g;
 drop(g);                        // ← 一次"使用"
@@ -320,7 +320,7 @@ v
 
 而块作用域版本：
 
-```rust
+```rust,ignore
 let v = { let g = m.lock().unwrap(); *g };
 ```
 
@@ -346,7 +346,7 @@ MIR 里验证得明明白白：`holds_guard_good` 的字段只有 `_s0: u64`。
 > 或者更彻底：把锁的操作抽成一个**同步函数**，
 > 让 `await` 的那一层根本看不到守卫。
 
-```rust
+```rust,ignore
 fn read_lock(m: &Mutex<u64>) -> u64 { *m.lock().unwrap() }   // 同步函数，没有 await
 
 pub async fn ok(m: &Mutex<u64>) -> u64 {
@@ -454,7 +454,7 @@ done
 是因为**解锁必须在加锁的线程**（第 12 章实测过这条：
 `fail/guard_not_send.rs` 报 "cannot be sent between threads safely"）。
 
-```rust
+```rust,ignore
 unsafe impl Send for HoldsGuard {}   // ← 这是 UB：解锁会发生在别的线程
 ```
 

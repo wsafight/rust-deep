@@ -36,7 +36,7 @@ where
 
 你写了一个把闭包存起来的小结构：
 
-```rust
+```rust,ignore
 pub struct Parser<F: Fn(&str) -> &str>(pub F);
 
 impl<F: Fn(&str) -> &str> Parser<F> {
@@ -65,7 +65,7 @@ help: consider introducing a named lifetime parameter
 
 更让人困惑的是另一个场景。下面这段**看起来等价**的代码，一个过一个不过：
 
-```rust
+```rust,ignore
 // ❌ 编译不过
 pub fn weak<'a, F: Fn(&'a str) -> &'a str>(f: F, s: &'a str) -> usize {
     let local = String::from("local");
@@ -167,7 +167,7 @@ fn total_visits(_1: &T) -> usize
 
 回到 9.0 那个"一个过一个不过"的例子。把两者的语义并排写出来：
 
-```rust
+```rust,ignore
 // 一次调用选定一个 'a；F 只需满足这个 'a
 pub fn weak<'a, F: Fn(&'a str) -> &'a str>(f: F, s: &'a str) -> usize { ... }
 
@@ -292,7 +292,7 @@ pub fn elided<F: Fn(&'static str) -> &'static str>(f: F) -> usize { f("hello").l
 
 所以 `fn parse(&self, s: &str) -> &str` 展开成：
 
-```rust
+```rust,ignore
 fn parse<'s>(&'s self, s: &str) -> &'s str
 ```
 
@@ -317,7 +317,7 @@ pub trait Visitor<'a> {
 
 于是你只有两条路（实测）：
 
-```rust
+```rust,ignore
 // (a) 把 'a 提成函数参数 —— 太弱，报 E0597
 pub fn total_visits<'a, T: Visitor<'a>>(t: &T) -> usize {
     let local = String::from("abc");

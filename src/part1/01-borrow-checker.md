@@ -25,7 +25,7 @@ fn display(name: &String) { println!("{name}"); }
 后续 `push` 可以合法发生；若后面还要读取原引用，扩容可能使它失效，编译器就会
 拒绝。这正是阅读 E0502 时应寻找“创建点、冲突点、最后使用点”的原因。
 
-```rust
+```rust,ignore
 let total = orders[0].total; // 把后续需要的信息取出来
 orders.push(new_order);      // 对 orders 的借用已经结束
 audit(total);
@@ -37,7 +37,7 @@ audit(total);
 
 先看这段代码。它编译不过：
 
-```rust
+```rust,ignore
 let mut v = vec![1, 2, 3];
 let first = &v[0];
 v.push(4);            // error[E0502]
@@ -123,7 +123,7 @@ rustc --edition 2024 --emit=mir -o ch01.mir --crate-type=lib \
 
 `examples/ch01-borrow/src/lib.rs` 里的 `simple()`：
 
-```rust
+```rust,ignore
 pub fn simple() -> f64 {
     let mut p = Point { x: 1.0, y: 2.0 };
     let r = &p;
@@ -189,7 +189,7 @@ fn simple() -> f64 {
 
 `simple()` 里借用是自动结束的（`r.x` 之后就没了）。再看一个更刻意的例子：
 
-```rust
+```rust,ignore
 pub fn nll_ok() -> u64 {
     let mut c = Counter { n: 0 };
     let r = &c.n;        // 共享借用产生
@@ -317,7 +317,7 @@ v.push(4);            // OK：first 的最后使用点在上一行
 
 反过来，如果你写：
 
-```rust
+```rust,ignore
 let mut v = vec![1, 2, 3];
 let first = &v[0];
 v.push(4);            // error[E0502]

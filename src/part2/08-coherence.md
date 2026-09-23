@@ -20,7 +20,7 @@ trait，但“外部 trait + 外部类型”会被拒绝。正确工程手段通
 `struct UserDto(external::User)`，由本 crate 拥有这个适配边界，同时避免未来
 依赖升级新增同名 impl 时产生全局冲突。
 
-```rust
+```rust,ignore
 #[repr(transparent)]
 struct UserDto(external_sdk::User);
 impl Display for UserDto { /* 定义本项目的展示规则 */ }
@@ -32,7 +32,7 @@ newtype 不只是“骗过编译器”：它把协议适配、校验和兼容策
 
 你在自己的库里定义了一个 trait，想让它对"所有能打印的东西"都可用：
 
-```rust
+```rust,ignore
 // 你的 crate：downstream
 use upstream::Format;                 // trait 来自另一个 crate
 
@@ -120,7 +120,7 @@ Rust Reference 的 *Implementations → Orphan rules* 一节，原文：
 
 ### 8.2.2 覆盖规则：本地类型必须出现在**第一个**位置
 
-```rust
+```rust,ignore
 pub struct Local(pub u64);
 
 impl<T> From<T> for Local<T>   { ... }   // ✅
@@ -172,7 +172,7 @@ Reference 紧接着的一句话是理解上面那段的钥匙（原文）：
 
 实测对照（这一对是本章最直观的证据）：
 
-```rust
+```rust,ignore
 pub struct Local(pub u64);
 
 impl std::fmt::Display for Box<Local> { ... }   // ✅ 编译通过
@@ -193,7 +193,7 @@ error[E0117]: only traits defined in the current crate can be implemented for ty
 
 `#[fundamental]` 在标准库里长这样（`rust-src`，`alloc/src/boxed.rs`）：
 
-```rust
+```rust,ignore
 #[lang = "owned_box"]
 #[fundamental]
 pub struct Box<T: ?Sized, A: Allocator = Global>(Unique<T>, A);
@@ -219,7 +219,7 @@ coherence 的另一半是"两个 impl 不能重叠"。但报错其实有**两种
 
 **形态一：冲突发生在具体类型上**（`fail/conflicting_blanket.rs`）：
 
-```rust
+```rust,ignore
 impl<T> MyTrait for T       { fn f(&self) -> u64 { 0 } }   // blanket
 impl     MyTrait for u64    { fn f(&self) -> u64 { 1 } }   // 具体类型
 ```
@@ -237,7 +237,7 @@ error[E0119]: conflicting implementations of trait `MyTrait` for type `u64`
 
 **形态二：冲突发生在泛型层面**（`fail/overlapping_blanket.rs`）：
 
-```rust
+```rust,ignore
 impl<T: Copy>  P for T { fn p(&self) -> u64 { 1 } }
 impl<T: Clone> P for T { fn p(&self) -> u64 { 2 } }
 ```
@@ -342,7 +342,7 @@ rustc --edition 2024 --crate-type=lib examples/ch08-coherence/cross-crate/downst
 上面说的是"两个 crate 抢同一个 impl"。但还有一类更隐蔽的冲突：
 **上游未来可能加的 impl**。
 
-```rust
+```rust,ignore
 // 你今天写这个（假设允许）
 impl<T: Copy> P for T { ... }
 ```
@@ -364,7 +364,7 @@ impl<T: Copy> P for T { ... }
 
 回到 8.0 那个"同一个写法，一个行一个不行"：
 
-```rust
+```rust,ignore
 impl<T: std::fmt::Display> Format   for T { ... }   // ❌ trait 是外部的
 impl<T: MyDisplay>        MyDebug   for T { ... }   // ✅ trait 是本地的
 ```
@@ -400,7 +400,7 @@ impl<T: MyDisplay>        MyDebug   for T { ... }   // ✅ trait 是本地的
 
 被拒绝时最常见的建议是"用 newtype 包一下"：
 
-```rust
+```rust,ignore
 pub struct Wrapped(pub Vec<u64>);
 impl std::fmt::Display for Wrapped { ... }
 ```

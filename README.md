@@ -25,6 +25,11 @@ scripts/verify-all.sh ch07
 
 # Miri 验证（8 组检查，需要 nightly；与 stable 验证分开）
 scripts/verify-miri.sh
+
+# 安装并启用本地 pre-commit 检查
+python3 -m pip install pre-commit
+python3 -m pre_commit install
+python3 -m pre_commit run --all-files
 ```
 
 ## 目录结构
@@ -40,6 +45,7 @@ scripts/verify-miri.sh
 | `examples/*/evidence.md` | 该章的实测记录（命令 + 真实输出 + 断言清单） |
 | `tools/` | 生成 MIR / LLVM IR / 汇编 / 反汇编的脚本 |
 | `.evidence/` | 证据产物（gitignore，随时可重新生成） |
+| `.pre-commit-config.yaml` | 本地提交前检查（格式、Clippy、测试、doctest、证据链） |
 | `PLAN.md` | 写作阶段的设计与实测笔记，不属于正式书稿 |
 
 ## 证据工具
@@ -65,6 +71,7 @@ tools/evidence.sh ch16-atomics x86_64-apple-darwin
 - 主验证目标：`aarch64-apple-darwin`
 - 对照目标：`x86_64-apple-darwin`（可选；**只生成代码，不运行**）
 - Miri：可选 nightly 工具；安装方式见附录 A
+- 提交前检查：安装并运行 `.pre-commit-config.yaml` 中的本地 hooks（见附录 A）
 
 ## 当前状态
 

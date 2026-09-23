@@ -28,13 +28,16 @@
 /// 存活区间由**使用点**决定，不由词法块决定。
 pub fn simple() -> f64 {
     let mut p = Point { x: 1.0, y: 2.0 };
-    let r = &p;          // ← 借用在这里"产生"
-    let v = r.x;         // ← 最后一次使用 `r`
-    p.x = 3.0;           // ← 因此这里写 p 是合法的
+    let r = &p; // ← 借用在这里"产生"
+    let v = r.x; // ← 最后一次使用 `r`
+    p.x = 3.0; // ← 因此这里写 p 是合法的
     v + p.y
 }
 
-pub struct Point { pub x: f64, pub y: f64 }
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+}
 
 /// 第二个样本：**借用与可变借用交错**，证明"存活区间由使用点决定"。
 ///
@@ -52,15 +55,19 @@ pub struct Point { pub x: f64, pub y: f64 }
 /// 变的是使用点的位置，不是词法作用域。
 pub fn nll_ok() -> u64 {
     let mut c = Counter { n: 0 };
-    let r = &c.n;        // 共享借用产生
-    let seen = *r;       // ← 最后一次使用 r
-    c.bump();            // ← 因此这里的可变借用合法
+    let r = &c.n; // 共享借用产生
+    let seen = *r; // ← 最后一次使用 r
+    c.bump(); // ← 因此这里的可变借用合法
     seen + c.n
 }
 
-pub struct Counter { pub n: u64 }
+pub struct Counter {
+    pub n: u64,
+}
 impl Counter {
-    pub fn bump(&mut self) { self.n += 1; }
+    pub fn bump(&mut self) {
+        self.n += 1;
+    }
 }
 
 /// 第三个样本：**路径敏感**——所有分支都用掉借用之后，冲突就消失了。
@@ -70,6 +77,7 @@ impl Counter {
 ///
 /// 对照（见 `fail/use_after_conflict.rs`）：**只在一个分支里**使用，
 /// 就会报 E0502 —— 因为"不走 if"那条路径仍然能到达使用点。
+#[allow(clippy::if_same_then_else)]
 pub fn branch_all_use(flag: bool) -> usize {
     let mut v = vec![1u64, 2, 3];
     let first = &v[0];
@@ -78,6 +86,6 @@ pub fn branch_all_use(flag: bool) -> usize {
     } else {
         println!("{first}");
     }
-    v.push(4);          // ← 合法：两条路径都在上面用掉了借用
+    v.push(4); // ← 合法：两条路径都在上面用掉了借用
     v.len()
 }

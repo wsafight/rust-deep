@@ -21,18 +21,28 @@ use std::marker::PhantomData;
 ///
 /// 下面两个函数除了写法不同，**约束完全一样** ——
 /// `call_elided` 与 `call_explicit` 的汇编可以逐条对照。
-pub fn elided<F: Fn(&str) -> &str>(f: F) -> usize { f("hello").len() }
+pub fn elided<F: Fn(&str) -> &str>(f: F) -> usize {
+    f("hello").len()
+}
 
-pub fn explicit<F: for<'a> Fn(&'a str) -> &'a str>(f: F) -> usize { f("hello").len() }
+pub fn explicit<F: for<'a> Fn(&'a str) -> &'a str>(f: F) -> usize {
+    f("hello").len()
+}
 
 /// 一个具体的 `F`，用来把上面两个泛型函数**单态化**出来。
-fn id_str(s: &str) -> &str { s }
+fn id_str(s: &str) -> &str {
+    s
+}
 
 #[unsafe(no_mangle)]
-pub fn call_elided() -> usize { elided(id_str) }
+pub fn call_elided() -> usize {
+    elided(id_str)
+}
 
 #[unsafe(no_mangle)]
-pub fn call_explicit() -> usize { explicit(id_str) }
+pub fn call_explicit() -> usize {
+    explicit(id_str)
+}
 
 // ---------- 2) 太弱的 bound：把生命周期提到函数参数 ----------
 
@@ -60,7 +70,9 @@ where
 }
 
 #[unsafe(no_mangle)]
-pub fn call_strong() -> usize { strong(id_str) }
+pub fn call_strong() -> usize {
+    strong(id_str)
+}
 
 // ---------- 3) 存进 struct：省略规则在这里帮不了你 ----------
 
@@ -79,7 +91,9 @@ impl<F: for<'a> Fn(&'a str) -> &'a str> Parser<F> {
     ///
     /// **HRTB 约束的是 `F`，不是 `parse` 自己的签名。**
     /// 量词在 `F` 上，返回值该怎么标还是得自己标。
-    pub fn parse<'a>(&self, s: &'a str) -> &'a str { (self.0)(s) }
+    pub fn parse<'a>(&self, s: &'a str) -> &'a str {
+        (self.0)(s)
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -110,11 +124,15 @@ where
 pub struct Len;
 
 impl<'a> Visitor<'a> for Len {
-    fn visit(&self, s: &'a str) -> usize { s.len() }
+    fn visit(&self, s: &'a str) -> usize {
+        s.len()
+    }
 }
 
 #[unsafe(no_mangle)]
-pub fn call_visitor() -> usize { total_visits(&Len) }
+pub fn call_visitor() -> usize {
+    total_visits(&Len)
+}
 
 // ---------- 5) dyn 上的 HRTB ----------
 
@@ -126,7 +144,9 @@ pub fn boxed_parser() -> Box<dyn for<'a> Fn(&'a str) -> &'a str> {
 }
 
 #[unsafe(no_mangle)]
-pub fn call_boxed_parser() -> usize { boxed_parser()("hello").len() }
+pub fn call_boxed_parser() -> usize {
+    boxed_parser()("hello").len()
+}
 
 // ---------- 6) 反面对照：把生命周期绑到 struct 上 ----------
 
@@ -138,7 +158,9 @@ pub fn call_boxed_parser() -> usize { boxed_parser()("hello").len() }
 pub struct Cb<'a, F: Fn(&'a str) -> usize>(pub F, pub PhantomData<&'a ()>);
 
 impl<'a, F: Fn(&'a str) -> usize> Cb<'a, F> {
-    pub fn call(&self, s: &'a str) -> usize { (self.0)(s) }
+    pub fn call(&self, s: &'a str) -> usize {
+        (self.0)(s)
+    }
 }
 
 /// 用函数指针当 `F`（`fn(&'a str) -> usize` 是 `Fn(&'a str) -> usize` 的实现）。

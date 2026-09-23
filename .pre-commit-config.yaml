@@ -1,0 +1,40 @@
+minimum_pre_commit_version: "3.0.0"
+default_stages: [pre-commit]
+
+repos:
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: rustfmt
+        entry: cargo fmt --all -- --check
+        language: system
+        pass_filenames: false
+        files: \.rs$
+
+      - id: clippy
+        name: clippy (warnings as errors)
+        entry: cargo clippy --workspace --all-targets --locked -- -D warnings
+        language: system
+        pass_filenames: false
+        files: ^(Cargo\.toml|Cargo\.lock|examples/.*\.rs)$
+
+      - id: cargo-test
+        name: cargo test (workspace)
+        entry: cargo test --workspace --all-targets --locked
+        language: system
+        pass_filenames: false
+        files: ^(Cargo\.toml|Cargo\.lock|examples/.*\.rs)$
+
+      - id: mdbook-test
+        name: mdBook doctests
+        entry: mdbook test
+        language: system
+        pass_filenames: false
+        files: ^(book\.toml|src/.*\.md|examples/.*\.rs)$
+
+      - id: verify-evidence
+        name: verify evidence chain
+        entry: scripts/verify-all.sh
+        language: system
+        pass_filenames: false
+        files: ^(Cargo\.toml|Cargo\.lock|examples/|scripts/|tools/|rust-toolchain\.toml$)

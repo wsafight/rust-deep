@@ -26,9 +26,12 @@
 
 /// 安全版本：`v[i]` 带边界检查（但检查被 LLVM 消除了，见下）。
 #[unsafe(no_mangle)]
+#[allow(clippy::needless_range_loop)]
 pub fn sum_safe(v: &[u64]) -> u64 {
     let mut s = 0u64;
-    for i in 0..v.len() { s = s.wrapping_add(v[i]); }
+    for i in 0..v.len() {
+        s = s.wrapping_add(v[i]);
+    }
     s
 }
 
@@ -72,9 +75,9 @@ pub fn sum_iter(v: &[u64]) -> u64 {
 ///
 /// ```asm
 /// _masked_safe:
-/// 	and	x8, x1, #0x3          ; ← 只剩掩码本身
-/// 	ldr	x0, [x0, x8, lsl #3]
-/// 	ret                        ; 3 条指令，没有任何检查
+///     and    x8, x1, #0x3          ; ← 只剩掩码本身
+///     ldr    x0, [x0, x8, lsl #3]
+///     ret                        ; 3 条指令，没有任何检查
 /// ```
 #[unsafe(no_mangle)]
 pub fn masked_safe(v: &[u64; 4], i: usize) -> u64 {
@@ -103,12 +106,12 @@ pub fn masked_unchecked(v: &[u64; 4], i: usize) -> u64 {
 ///
 /// ```asm
 /// _get_safe:
-/// 	cmp	x2, x1                 ; ← 边界检查
-/// 	b.hs	LBB0_2                 ; ← 越界则跳去 panic
-/// 	ldr	x0, [x0, x2, lsl #3]
-/// 	ret
+///     cmp    x2, x1                 ; ← 边界检查
+///     b.hs   LBB0_2                 ; ← 越界则跳去 panic
+///     ldr    x0, [x0, x2, lsl #3]
+///     ret
 /// LBB0_2:                          ; cold 路径
-/// 	...  bl  panic_bounds_check
+///     ...  bl  panic_bounds_check
 /// ```
 #[unsafe(no_mangle)]
 pub fn get_safe(v: &[u64], i: usize) -> u64 {
@@ -119,8 +122,8 @@ pub fn get_safe(v: &[u64], i: usize) -> u64 {
 ///
 /// ```asm
 /// _get_unchecked:
-/// 	ldr	x0, [x0, x2, lsl #3]
-/// 	ret
+///     ldr    x0, [x0, x2, lsl #3]
+///     ret
 /// ```
 ///
 /// ★ **这是本章唯一一个 `unsafe` 真的省下东西的情形** ——
@@ -181,8 +184,10 @@ pub unsafe fn raw_double_add(a: *mut i32, b: *const i32) {
 #[unsafe(no_mangle)]
 pub fn split_and_sum(v: &mut [u64]) -> u64 {
     let mid = v.len() / 2;
-    let (a, b) = v.split_at_mut(mid);   // ← 安全，且不需要任何 unsafe
-    a.iter().chain(b.iter()).fold(0u64, |x, y| x.wrapping_add(*y))
+    let (a, b) = v.split_at_mut(mid); // ← 安全，且不需要任何 unsafe
+    a.iter()
+        .chain(b.iter())
+        .fold(0u64, |x, y| x.wrapping_add(*y))
 }
 
 /// ★ 想"按索引交换两个元素" —— 手写需要 `unsafe`
