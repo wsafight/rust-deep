@@ -322,7 +322,7 @@ struct Pinned { data: u64, _pin: PhantomPinned }
 
 ```bash
 tools/evidence.sh ch04-pin
-scripts/verify-all.sh ch04
+scripts/verify-evidence.sh ch04
 
 # 反例
 rustc --edition 2024 --crate-type=lib examples/ch04-pin/fail/pin_requires_unpin.rs
@@ -338,7 +338,7 @@ rustc --edition 2024 --crate-type=lib examples/ch04-pin/fail/pin_requires_unpin.
 4. 反例报 E0277，且信息里有 `PhantomPinned cannot be unpinned`。
 
 ```bash
-scripts/verify-all.sh ch04      # 6 条断言
+scripts/verify-evidence.sh ch04      # 6 条断言
 ```
 
 ## 4.6 与 unsafe 的关系

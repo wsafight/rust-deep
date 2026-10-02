@@ -1,7 +1,7 @@
 # 第 25 章：别名规则、`UnsafeCell` 与 `PhantomData` — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
-> Miri：`miri 0.1.0 (923c95cdf5 2026-09-16)`（`rustc 1.100.0-nightly`）
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
+> Miri：`miri 0.1.0 (215a8af4bb 2026-09-15)`（`rustc 1.100.0-nightly`）
 
 ## ★ 本章的证据层：主证据来自 Miri，不是 MIR
 
@@ -9,7 +9,7 @@
 |---|---|---|---|
 | **主** | **Miri** | 按当前 Stacked Borrows 模型检查具体路径 | `scripts/verify-miri.sh` |
 | 辅 | LLVM IR | 契约（`noalias` / `captures`） | `ch24-noalias` |
-| 澄清 | MIR | 只用来**破除误解**：`no_retag` 不是 retag | `verify-all.sh ch25`（5 条） |
+| 澄清 | MIR | 只用来**破除误解**：`no_retag` 不是 retag | `verify-evidence.sh ch25`（5 条） |
 
 ## ⚠️ 必须讲明白的坑：stable 的 MIR **看不到 retag 本体**
 
@@ -25,7 +25,7 @@
 
 **看起来"有 retag 的地方反而不打印"，很反直觉。**
 
-### 机制（读 rustc 1.98 源码确认）
+### 机制（读 rustc 1.99 源码确认）
 
 1. `Rvalue::Use` 带一个 `WithRetag::Yes/No` 枚举
    （`rustc_middle/src/mir/syntax.rs:488,1340`）。
@@ -42,7 +42,7 @@
 ### 更关键：`-Zdump-mir` 也看不到 retag
 
 对 `fn f(a: &mut u64, b: &mut u64)` dump **全部 pass**，**0 处 retag**。
-1.98 的 pass 列表里**根本没有 AddRetag** —— **retag 是 codegen 阶段的事**。
+1.99 的 pass 列表里**根本没有 AddRetag** —— **retag 是 codegen 阶段的事**。
 
 **证据**：`-Zcodegen-emit-retag`（需 nightly/bootstrap）会让汇编里出现
 `bl ___rust_retag_reg`（实测：`&mut` 参数 3 处、嵌套引用 4 处）。

@@ -385,7 +385,7 @@ grep -cE 'lfence|mfence|sfence' .evidence/ch16-atomics-lib.O3.x86_64.s
 ```bash
 tools/evidence.sh ch16-atomics                          # 宿主架构（AArch64）
 tools/evidence.sh ch16-atomics x86_64-apple-darwin      # 对照架构
-scripts/verify-all.sh ch16
+scripts/verify-evidence.sh ch16
 
 # AArch64：每个 Ordering 一条不同的指令
 for f in load_relaxed load_acquire load_seqcst store_relaxed store_release \
@@ -414,7 +414,7 @@ grep -cE 'lfence|mfence|sfence' .evidence/ch16-atomics-lib.O3.x86_64.s
 6. x86_64 产物里 `lfence|mfence|sfence` **出现 0 次**。
 
 ```bash
-scripts/verify-all.sh ch16      # 9 条断言
+scripts/verify-evidence.sh ch16      # 9 条断言
 ```
 
 ## 16.6 与 unsafe 的关系

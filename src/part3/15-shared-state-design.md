@@ -343,7 +343,7 @@ std::thread::scope(|s| {
 
 ```bash
 tools/evidence.sh ch15-shared-state
-scripts/verify-all.sh ch15
+scripts/verify-evidence.sh ch15
 
 # ★ 两种累加器的循环体对照
 awk '/^_atomic_accumulate:/,/cfi_endproc/' .evidence/ch15-shared-state-lib.O3.s
@@ -365,7 +365,7 @@ rustc --edition 2024 --crate-type=lib examples/ch15-shared-state/fail/rc_refcell
 4. `fail/rc_refcell_thread.rs` 报 **E0277**。
 
 ```bash
-scripts/verify-all.sh ch15      # 断言数见 evidence.md
+scripts/verify-evidence.sh ch15      # 断言数见 evidence.md
 ```
 
 ## 15.6 与 unsafe 的关系

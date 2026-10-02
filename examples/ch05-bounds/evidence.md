@@ -1,12 +1,12 @@
 # 第 5 章：边界检查 —— 安全检查什么时候是免费的
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch05-bounds
-scripts/verify-all.sh ch05
+scripts/verify-evidence.sh ch05
 ```
 
 ## ★ 核心结论：热路径一样，**失败路径不一样**
@@ -21,7 +21,7 @@ _safe:
 	ldrb	w0, [x0, x2]        ; ← 热路径 3 条指令
 	ret
 LBB3_2:                          ; ← 失败路径
-	bl	__RNvNtCs8Mbv00yxnRz_4core9panicking18panic_bounds_check
+	bl	__RNvNtCsjIpoRzUjyHQ_4core9panicking18panic_bounds_check
 
 ; checked_unchecked —— assert!(i < v.len()) + get_unchecked
 _checked_unchecked:

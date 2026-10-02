@@ -12,7 +12,7 @@
 //!   汇编里是 `_sum_unchecked = _sum_safe` 这样的 alias。
 //!   这种情况下，`unsafe` 换来的**恰好是零**。
 //!
-//! 三组对照（`-O` / `aarch64-apple-darwin` / rustc 1.98.1）：
+//! 三组对照（`-O` / `aarch64-apple-darwin` / rustc 1.99.0）：
 //!
 //! | 情形 | 安全版本 | `unsafe` 版本 | 差值 |
 //! |---|---|---|---|

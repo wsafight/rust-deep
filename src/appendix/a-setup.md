@@ -1,30 +1,30 @@
 # 附录 A：环境与版本
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## A.1 版本口径
 
 | 项 | 值 |
 |---|---|
-| Rust | **1.98.1**（stable，2026-09-03 发布） |
+| Rust | **1.99.0**（stable） |
 | Edition | **2024** |
-| LLVM | **22.1.8** |
+| LLVM | **23.1.1** |
 | 主验证目标 | `aarch64-apple-darwin` |
 | 对照目标 | `x86_64-apple-darwin`（**只能看代码，不能运行**） |
-| Miri | `miri 0.1.0 (923c95cdf5 2026-09-16)`（`rustc 1.100.0-nightly`） |
+| Miri | `miri 0.1.0 (215a8af4bb 2026-09-15)`（`rustc 1.100.0-nightly`） |
 | tokio（仅第 22 章） | `1.53.1`（唯一的第三方依赖） |
 
 核对本机版本：
 
 ```bash
 rustc -vV
-# rustc 1.98.1 (48a229cea 2026-09-01)
+# rustc 1.99.0 (b940084d7 2026-09-28)
 # host: aarch64-apple-darwin
-# LLVM version: 22.1.8
+# LLVM version: 23.1.1
 ```
 
 > ⚠️ **符号名里的 hash 会变。** 汇编里形如
-> `__RNvCsrtIYgyWToU_3lib7sum_dyn` 的那段 `CsrtIYgyWToU` 是 crate hash，
+> `__RNvCs8vZMNLDlXs5_3lib7sum_dyn` 的那段 `Cs8vZMNLDlXs5` 是 crate hash，
 > **每次编译都可能不同**（换工具链、改代码、改路径都会变）。
 > 引用汇编时不要把它当常量 —— 本书的断言一律只匹配指令与偏移。
 
@@ -33,9 +33,8 @@ rustc -vV
 正文里所有命令**只需要 stable**：
 
 ```bash
-# 只需要这个（如果还没有）
-rustup toolchain install stable
-rustup update stable        # 确保是 1.98.1
+# 仓库里的 rust-toolchain.toml 会选择这个固定版本
+rustup toolchain install 1.99.0 -c rustfmt -c clippy
 ```
 
 ### Miri（可选，用于第 19、23、25 章）
@@ -43,15 +42,15 @@ rustup update stable        # 确保是 1.98.1
 Miri **不在 stable 里** —— 它是独立的 MIR 解释器，只随 nightly 发布。
 
 ```bash
-rustup toolchain install nightly -c rustc -c miri -c rust-src
-cargo +nightly miri setup
+rustup toolchain install nightly-2026-09-16 -c rustc -c cargo -c miri -c rust-src
+cargo +nightly-2026-09-16 miri setup
 ```
 
 验证：
 
 ```bash
-cargo +nightly miri --version
-# miri 0.1.0 (923c95cdf5 2026-09-16)
+cargo +nightly-2026-09-16 miri --version
+# miri 0.1.0 (215a8af4bb 2026-09-15)
 ```
 
 ⚠️ 两个代价：
@@ -72,7 +71,8 @@ rustup target add x86_64-apple-darwin
 
 ## A.3 本地 pre-commit 检查
 
-项目不接入 GitHub Actions；提交前检查通过本地 `pre-commit` hooks 完成。首次安装并对整个工作区执行一次：
+GitHub Actions 会在 pull request 上运行跨平台检查、固定平台证据和 Miri。
+本地提交前检查继续通过 `pre-commit` hooks 完成。首次安装并对整个工作区执行一次：
 
 ```bash
 python3 -m pip install pre-commit
@@ -92,11 +92,12 @@ python3 -m pre_commit run --all-files
 cargo install mdbook --locked   # 尚未安装时
 mdbook serve --open
 
-# 一键验证全书证据（可选 target 缺失时显示 SKIP）
+# 一键验证全部质量门禁与证据
 scripts/verify-all.sh
 
-# 只验证某一章（编译、证据、断言都受此过滤）
-scripts/verify-all.sh ch07
+# 跨平台检查 / 只验证某一章的固定平台证据
+scripts/verify-portable.sh
+scripts/verify-evidence.sh ch07
 
 # Miri 验证（8 组检查，需要 nightly；与上面分开）
 scripts/verify-miri.sh
@@ -111,7 +112,7 @@ tools/mir.sh      ch01-borrow        # MIR（stable，无需 nightly）
 tools/llvm.sh     ch07-vtable 3      # LLVM IR，opt-level=3
 tools/asm.sh      ch07-vtable 0      # 汇编，opt-level=0
 tools/objdump.sh  ch13-arc-mutex 3   # 反汇编
-tools/evidence.sh ch07-vtable        # 一次生成该章全部证据（s/ll/mir/o）
+tools/evidence.sh ch07-vtable        # 一次生成该章的 MIR / LLVM IR / 汇编
 
 # 跨架构对照（产物带 .x86_64 后缀，只出代码，不能运行）
 tools/evidence.sh ch16-atomics x86_64-apple-darwin
@@ -181,9 +182,9 @@ cargo expand -p ch22-tokio --bin ch22-tokio
 第 22 章（tokio）需要真的链接 tokio。机制是：
 
 1. `examples/ch22-tokio/externs` 里逐行写需要哪些 crate；
-2. `tools/lib.sh` 的 `rd_extern_args` 用 `cargo build --message-format=json`
+2. `tools/lib.sh` 的 `rd_prepare_rustc_args` 用 `cargo build --message-format=json`
    找出 `.rlib` 路径，拼出 `--extern=tokio=...` **以及 `-L dependency=<deps 目录>`**；
-3. `tools/*.sh` 和 `scripts/verify-all.sh` 都调用它。
+3. `tools/*.sh` 和 `scripts/verify-evidence.sh` 都调用它。
 
 ★ **`-L dependency=` 是必需的**：只给 `--extern` 不够 ——
 rustc 会从 tokio 的 metadata 里读到它依赖 `pin_project_lite` 等 crate，

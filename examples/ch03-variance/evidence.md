@@ -1,12 +1,12 @@
 # 第 3 章：协变、逆变与不变 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch03-variance
-scripts/verify-all.sh ch03      # 7 条断言
+scripts/verify-evidence.sh ch03      # 7 条断言
 ```
 
 ## ⚠️ 本章证据链的特殊性（写作前必读）

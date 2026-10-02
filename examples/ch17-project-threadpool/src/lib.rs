@@ -34,7 +34,9 @@ use std::sync::{Arc, Mutex};
 /// ★ 而且这里**必须**是 `Box<dyn ...>`（第 7 章）：
 /// 不同的任务类型不同，`Vec<Job>` 需要一个统一大小 ——
 /// 于是装箱成 trait object。
+// ANCHOR: job_type
 pub type Job = Box<dyn FnOnce() + Send + 'static>;
+// ANCHOR_END: job_type
 
 /// 最小线程池。
 pub struct ThreadPool {
@@ -92,6 +94,7 @@ impl ThreadPool {
 impl Worker {
     fn new(id: usize, receiver: Arc<Mutex<Receiver<Job>>>) -> Worker {
         let handle = std::thread::spawn(move || {
+            // ANCHOR: worker_loop
             loop {
                 // ★ 关键：**锁的作用域只覆盖 recv，不覆盖任务的执行**。
                 // 否则所有任务会串行化 —— 这是线程池最常见的一个 bug。
@@ -108,6 +111,7 @@ impl Worker {
                     Err(_) => break,
                 }
             }
+            // ANCHOR_END: worker_loop
         });
         Worker {
             handle: Some(handle),
@@ -115,6 +119,7 @@ impl Worker {
     }
 }
 
+// ANCHOR: thread_pool_drop
 impl Drop for ThreadPool {
     /// ★ `Drop` 的顺序是本章最微妙的部分：
     ///
@@ -136,6 +141,7 @@ impl Drop for ThreadPool {
         }
     }
 }
+// ANCHOR_END: thread_pool_drop
 
 // ============================================================
 // 用法示例（也用来做证据）
@@ -180,6 +186,7 @@ pub fn pool_sum(n_workers: usize, data: Vec<u64>) -> u64 {
 /// 代价是引入了一处共享可变状态和一次 move。
 /// 若需要背压，应改用 `sync_channel` 或其他有界队列。
 #[unsafe(no_mangle)]
+// ANCHOR: spawn_per_task
 pub fn spawn_per_task(data: Vec<u64>) -> u64 {
     let handles: Vec<_> = data
         .chunks(4)
@@ -193,3 +200,4 @@ pub fn spawn_per_task(data: Vec<u64>) -> u64 {
         .map(|h| h.join().unwrap())
         .fold(0u64, u64::wrapping_add)
 }
+// ANCHOR_END: spawn_per_task

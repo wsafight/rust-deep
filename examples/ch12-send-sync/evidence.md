@@ -1,17 +1,17 @@
 # 第 12 章：Send 与 Sync 的真相 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch12-send-sync
-scripts/verify-all.sh ch12       # 9 条断言（PASS=11）
+scripts/verify-evidence.sh ch12       # 9 条断言（PASS=11）
 ```
 
 ## 关键结论与断言（9 条，全绿）
 
-| # | 结论 | 断言（`scripts/verify-all.sh`） |
+| # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
 | 1 | `Rc<T>` 不能跨线程（`!Send`） | `fail/not_send.rs` → **E0277** |
 | 2 | `Cell<T>` 不能共享引用（`!Sync`） | `fail/not_sync.rs` → **E0277** |
@@ -35,7 +35,7 @@ grep -c 'Send\|Sync' .evidence/ch12-send-sync-lib.O3.s
 18 处命中**全部**在 mangled 符号名内部，例如：
 
 ```text
-__RINvNtCs8Mbv00yxnRz_4core3ptr9drop_glueINtNtB4_4cell10UnsafeCellINtNtB4_6option6OptionINtNtB4_6result6ResultjINtNtCshxvaOLs88l5_5alloc5boxed3BoxDNtNtB4_3any3AnyNtNtB4_6marker4SendEL_EEEEECsrtIYgyWToU_3lib:
+__RINvNtCsjIpoRzUjyHQ_4core3ptr9drop_glueINtNtB4_4cell10UnsafeCellINtNtB4_6option6OptionINtNtB4_6result6ResultjINtNtCs6zY7rJBZy9D_5alloc5boxed3BoxDNtNtB4_3any3AnyNtNtB4_6marker4SendEL_EEEEECs8vZMNLDlXs5_3lib:
 ```
 
 把 `SendEL_` 解出来是 `Box<dyn Any + Send>` ——
@@ -45,10 +45,10 @@ __RINvNtCs8Mbv00yxnRz_4core3ptr9drop_glueINtNtB4_4cell10UnsafeCellINtNtB4_6optio
 `grep -o 'Send[A-Za-z0-9_]*'` 的完整去重结果：
 
 ```text
-SendEL_EECsrtIYgyWToU_3lib
-SendEL_EEECsrtIYgyWToU_3lib
-SendEL_EEEEECsrtIYgyWToU_3lib
-SendEL_ENtNtBM_3fmt5Debug3fmtCsrtIYgyWToU_3lib
+SendEL_EECs8vZMNLDlXs5_3lib
+SendEL_EEECs8vZMNLDlXs5_3lib
+SendEL_EEEEECs8vZMNLDlXs5_3lib
+SendEL_ENtNtBM_3fmt5Debug3fmtCs8vZMNLDlXs5_3lib
 SendEL_NtNtB7_3fmt5Debug3fmt
 ```
 

@@ -52,7 +52,7 @@ pool.execute(|| { /* 任务 */ });
 ## 17.1 任务类型：三个约束缺一不可
 
 ```rust
-pub type Job = Box<dyn FnOnce() + Send + 'static>;
+{{#include ../../examples/ch17-project-threadpool/src/lib.rs:job_type}}
 ```
 
 逐个解释这三个约束：
@@ -124,16 +124,7 @@ _8 = Arc::<std::sync::Mutex<std::sync::mpsc::Receiver<Box<dyn FnOnce() + Send>>>
 ### ★ 锁的作用域：线程池最容易写错的地方
 
 ```rust,ignore
-loop {
-    let msg = {
-        let guard = receiver.lock().unwrap();   // ← 锁在这里获取
-        guard.recv()                            // ← recv 在锁内
-    };                                          // ← guard 在这里 drop（解锁）
-    match msg {
-        Ok(job) => job(),                       // ★ 任务在锁**外**执行
-        Err(_) => break,
-    }
-}
+{{#include ../../examples/ch17-project-threadpool/src/lib.rs:worker_loop}}
 ```
 
 **如果写成这样就是 bug：**
@@ -177,16 +168,7 @@ bb10: {
 ## 17.3 `Drop` 的顺序：本章最微妙的部分
 
 ```rust,ignore
-impl Drop for ThreadPool {
-    fn drop(&mut self) {
-        drop(self.sender.take());          // ① 关闭 channel
-        for w in &mut self.workers {
-            if let Some(h) = w.handle.take() {
-                let _ = h.join();          // ② 等 worker 退出
-            }
-        }
-    }
-}
+{{#include ../../examples/ch17-project-threadpool/src/lib.rs:thread_pool_drop}}
 ```
 
 **为什么必须这个顺序？**
@@ -232,15 +214,7 @@ bb2: {
 ## 17.4 与"每任务一线程"的对照
 
 ```rust
-pub fn spawn_per_task(data: Vec<u64>) -> u64 {
-    let handles: Vec<_> = data.chunks(4)
-        .map(|c| {
-            let c = c.to_vec();
-            std::thread::spawn(move || c.iter().fold(0u64, |a, b| a.wrapping_add(*b)))
-        })
-        .collect();
-    handles.into_iter().map(|h| h.join().unwrap()).fold(0u64, u64::wrapping_add)
-}
+{{#include ../../examples/ch17-project-threadpool/src/lib.rs:spawn_per_task}}
 ```
 
 | | 每任务一线程 | 线程池 |
@@ -266,7 +240,7 @@ pub fn spawn_per_task(data: Vec<u64>) -> u64 {
 
 ```bash
 tools/evidence.sh ch17-project-threadpool
-scripts/verify-all.sh ch17
+scripts/verify-evidence.sh ch17
 
 # 任务类型（MIR 里逐字可见）
 grep -n 'channel::<Box<dyn FnOnce() + Send>>' .evidence/ch17-project-threadpool-lib.mir
@@ -292,7 +266,7 @@ sed -n '/fn <impl at.*Drop for ThreadPool/,/bb3/p' .evidence/ch17-project-thread
 5. `fail/job_not_send.rs` 报 **E0277**（捕获 `Rc` 的任务被拒）。
 
 ```bash
-scripts/verify-all.sh ch17      # 10 条断言
+scripts/verify-evidence.sh ch17      # 10 条断言
 ```
 
 ## 17.6 与 unsafe 的关系

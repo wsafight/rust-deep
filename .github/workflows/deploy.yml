@@ -3,41 +3,81 @@ name: Deploy mdBook to GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
   # 允许在 Actions 页面手动触发
   workflow_dispatch:
 
-# GitHub Pages 部署需要的权限（缺一不可）：
-#   contents: read  —— checkout
-#   pages: write    —— 发布
-#   id-token: write —— OIDC 校验，证明这次部署确实来自本仓库
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # 只允许一个并发部署；排队等前一个跑完，不中途取消
 # （部署被中途取消可能留下半个站点）
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  MDBOOK_VERSION: v0.5.2
 
 jobs:
-  build:
+  quality:
+    name: 跨平台质量检查
     runs-on: ubuntu-latest
-    env:
-      # 固定版本 —— 与 book.toml / README 里标注的口径一致
-      MDBOOK_VERSION: v0.5.2
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.0
+          components: rustfmt, clippy
+      - name: 安装并校验 mdBook
+        env:
+          MDBOOK_INSTALL_DIR: ${{ runner.temp }}/mdbook-bin
+        run: |
+          scripts/install-mdbook.sh
+          echo "$MDBOOK_INSTALL_DIR" >> "$GITHUB_PATH"
+      - name: 格式、Clippy、测试和文档
+        run: scripts/verify-portable.sh
+
+  evidence:
+    name: AArch64 macOS 证据链
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.99.0
+      - name: 安装代码生成目标
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: 验证 MIR、LLVM IR 和汇编断言
+        run: scripts/verify-evidence.sh
+
+  miri:
+    name: Miri
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: 安装固定日期的 Miri 工具链
+        run: rustup toolchain install nightly-2026-09-16 --profile minimal -c miri -c rust-src
+      - name: 验证合法与预期 UB 用例
+        run: scripts/verify-miri.sh
+
+  build:
+    if: github.event_name != 'pull_request'
+    needs: [quality, evidence, miri]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v7
 
-      - name: 安装 mdBook
+      - name: 安装并校验 mdBook
+        env:
+          MDBOOK_INSTALL_DIR: ${{ runner.temp }}/mdbook-bin
         run: |
-          set -euo pipefail
-          url="https://github.com/rust-lang/mdBook/releases/download/${MDBOOK_VERSION}/mdbook-${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-          mkdir -p "$HOME/.local/bin"
-          curl -sSL "$url" | tar -xz -C "$HOME/.local/bin"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          mdbook --version
+          scripts/install-mdbook.sh
+          echo "$MDBOOK_INSTALL_DIR" >> "$GITHUB_PATH"
 
       # book.toml 里已经写了 build-dir = "book"，所以直接 build 即可。
       # （不传 -d，避免和 book.toml 的配置打架）
@@ -53,8 +93,12 @@ jobs:
           path: book
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

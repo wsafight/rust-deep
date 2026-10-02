@@ -117,7 +117,7 @@ grep -c 'Send\|Sync' .evidence/ch12-send-sync-lib.O3.s
 看起来有 18 处？但逐条看下去，它们**全部**在 mangled 符号名内部：
 
 ```text
-__RINvNtCs8Mbv00yxnRz_4core3ptr9drop_glueINtNtB4_4cell10UnsafeCellINtNtB4_6option6OptionINtNtB4_6result6ResultjINtNtCshxvaOLs88l5_5alloc5boxed3BoxDNtNtB4_3any3AnyNtNtB4_6marker4SendEL_EEEEECsrtIYgyWToU_3lib:
+__RINvNtCsjIpoRzUjyHQ_4core3ptr9drop_glueINtNtB4_4cell10UnsafeCellINtNtB4_6option6OptionINtNtB4_6result6ResultjINtNtCs6zY7rJBZy9D_5alloc5boxed3BoxDNtNtB4_3any3AnyNtNtB4_6marker4SendEL_EEEEECs8vZMNLDlXs5_3lib:
 ```
 
 把 `SendEL_` 那段解出来，它说的是
@@ -476,7 +476,7 @@ PhantomData<&'a T>         // → 跟随 T
 
 ```bash
 tools/evidence.sh ch12-send-sync
-scripts/verify-all.sh ch12
+scripts/verify-evidence.sh ch12
 
 # ★ 汇编里没有"检查 Send"的代码（命中的全在符号名里）
 grep -o 'Send[A-Za-z0-9_]*' .evidence/ch12-send-sync-lib.O3.s | sort -u
@@ -504,7 +504,7 @@ done
    —— 这一对就是"`Sync` 与 `Send` 互相独立"的全部证据。
 
 ```bash
-scripts/verify-all.sh ch12      # 9 条断言
+scripts/verify-evidence.sh ch12      # 9 条断言
 ```
 
 ## 12.6 与 unsafe 的关系

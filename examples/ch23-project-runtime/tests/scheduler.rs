@@ -86,7 +86,7 @@ fn yield_now_wakes_and_finishes() {
 ///
 /// 本用例把 waker 拿到另一个线程去调用，验证：
 /// 1. 任务确实被重新入队并完成；
-/// 2. Miri 不报数据竞争（`cargo +nightly miri test`）。
+/// 2. Miri 不报数据竞争（`cargo +nightly-2026-09-16 miri test`）。
 #[test]
 fn wake_from_another_thread() {
     use std::sync::mpsc;

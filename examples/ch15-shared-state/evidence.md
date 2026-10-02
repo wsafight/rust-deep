@@ -1,17 +1,17 @@
 # 第 15 章：共享可变状态的所有权设计 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch15-shared-state
-scripts/verify-all.sh ch15       # 5 条断言（PASS=7）
+scripts/verify-evidence.sh ch15       # 5 条断言（PASS=7）
 ```
 
 ## 关键结论与断言（5 条，全绿）
 
-| # | 结论 | 断言（`scripts/verify-all.sh`） |
+| # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
 | 1 | `atomic` 版本存在 | `.O3.s` 的 `^_atomic_accumulate:` |
 | 2 | `Mutex` 版本存在 | `.O3.s` 的 `^_mutex_accumulate:` |

@@ -1,12 +1,12 @@
 # 第 20 章：`async` 中的生命周期与 `Send` 传染 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch20-async-lifetimes
-scripts/verify-all.sh ch20      # 17 条断言
+scripts/verify-evidence.sh ch20      # 17 条断言
 ```
 
 ## 关键结论与断言（17 条，全绿）
@@ -215,7 +215,7 @@ grep -n '^_[a-z_]*:' .evidence/ch20-async-lifetimes-lib.O3.s
 
 ## 待办
 
-- [x] `verify-all.sh ch20` 全绿
+- [x] `verify-evidence.sh ch20` 全绿
 - [x] 5 个反例落库并加断言
 - [x] 实测并**推翻**了"future 天生 `!Sync`"这一常见说法
 - [ ] 第 21 章（AFIT）需要新 example —— 本章的 `Send` / 生命周期

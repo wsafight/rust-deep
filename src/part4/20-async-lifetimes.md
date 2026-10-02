@@ -193,7 +193,7 @@ pub fn assert_send<F: Send>(_f: F) {}
 ```
 
 **它没有任何运行时开销** —— 只在类型层检查一次，然后消失。
-（`verify-all.sh` 里有一条断言直接检查：`.O3.s` 里**没有** `_assert_send:` 符号。）
+（`verify-evidence.sh` 里有一条断言直接检查：`.O3.s` 里**没有** `_assert_send:` 符号。）
 
 把各种 future 交给它，就是一张实测表：
 
@@ -407,7 +407,7 @@ MIR 里 `Suspend0 (3): [_s0, _s1, _s2]` 列出的是**这个挂起点上活着�
 
 ```bash
 tools/evidence.sh ch20-async-lifetimes
-scripts/verify-all.sh ch20      # 17 条断言
+scripts/verify-evidence.sh ch20      # 17 条断言
 
 # ★ 借用跨 await → 状态机里多一个引用字段
 grep -n 'coroutine layout' -A 9 .evidence/ch20-async-lifetimes-lib.mir | head -20

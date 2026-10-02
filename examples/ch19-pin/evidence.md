@@ -1,13 +1,13 @@
 # 第 19 章：`Pin` 与 `Unpin` 为什么存在 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
-> Miri：`miri 0.1.0 (923c95cdf5 2026-09-16)`（`rustc 1.100.0-nightly`）
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
+> Miri：`miri 0.1.0 (215a8af4bb 2026-09-15)`（`rustc 1.100.0-nightly`）
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch19-pin
-scripts/verify-all.sh ch19      # 13 条断言（PASS=15）
+scripts/verify-evidence.sh ch19      # 13 条断言（PASS=15）
 
 # ★ Miri（需要 nightly，与 verify-all.sh 分开）
 scripts/verify-miri.sh          # 8 组检查（含前置检查）
@@ -50,7 +50,7 @@ impl SelfRef {
 }
 ```
 
-O3 汇编（`aarch64-apple-darwin` / `rustc 1.98.1` / `-O` / `#[unsafe(no_mangle)]`）：
+O3 汇编（`aarch64-apple-darwin` / `rustc 1.99.0` / `-O` / `#[unsafe(no_mangle)]`）：
 
 ```asm
 _make_self_ref:
@@ -95,7 +95,7 @@ _read_self_ref:
 	ret
 ```
 
-⚠️ 符号名里的 hash（`CsrtIYgyWToU`）**每次编译都会变**，不要当常量。
+⚠️ 符号名里的 hash（`Cs8vZMNLDlXs5`）**每次编译都会变**，不要当常量。
 
 ## ★ 核心证据二：`async` 状态机真的自引用
 
@@ -234,6 +234,6 @@ grep -n 'get_unchecked_mut' .evidence/ch19-pin-lib.mir
 
 ## 当前覆盖
 
-- `verify-all.sh ch19` 检查生成代码和编译失败反例；
+- `verify-evidence.sh ch19` 检查生成代码和编译失败反例；
 - Miri 覆盖合法自引用、移动后悬垂和失效指针；
 - 公共构造器测试验证自引用指向返回对象自身。

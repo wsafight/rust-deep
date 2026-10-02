@@ -238,7 +238,7 @@ fn get_two_ids(t: &Tree) -> (NodeId, NodeId) {
 
 ```bash
 tools/evidence.sh ch05-project-tree
-scripts/verify-all.sh ch05
+scripts/verify-evidence.sh ch05
 
 # 对照指令数
 awk '/^_arena_depth:/,/cfi_endproc/' .evidence/ch05-project-tree-lib.O3.s | grep -vc '^\s*\.\|^_'
@@ -257,7 +257,7 @@ grep -o 'drop_slow\|panic_already_mutably_borrowed\|__Unwind_Resume' \
 3. 在当前工具链和样本中，两个函数的静态指令数差约 4 倍。
 
 ```bash
-scripts/verify-all.sh ch05      # 5 条断言
+scripts/verify-evidence.sh ch05      # 5 条断言
 ```
 
 ## 5.6 与 unsafe 的关系

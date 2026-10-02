@@ -21,7 +21,7 @@
 //   要么用 `async fn`（写不了 `+ Send`），
 //   要么手写 `impl Future`（每个实现都得写包装）。
 //
-//   这就是 1.98 上 AFIT 最尴尬的地方。
+//   这就是 1.99 上 AFIT 最尴尬的地方。
 
 use std::future::Future;
 

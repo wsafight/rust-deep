@@ -399,7 +399,7 @@ rustc --edition 2024 --crate-type=lib examples/ch01-borrow/fail/E0502.rs
 这三条都写成了自动断言：
 
 ```bash
-scripts/verify-all.sh ch01      # 5 条断言
+scripts/verify-evidence.sh ch01      # 5 条断言
 ```
 
 ## 1.6 与 unsafe 的关系
@@ -417,7 +417,7 @@ scripts/verify-all.sh ch01      # 5 条断言
 Miri 能把这三类错误抓出来——哪怕它们在普通运行下看起来完全正常：
 
 ```text
-$ cargo +nightly miri test
+$ cargo +nightly-2026-09-16 miri test
 error: Undefined Behavior: memory access failed: alloc291 has been freed,
        so this pointer is dangling
 ```

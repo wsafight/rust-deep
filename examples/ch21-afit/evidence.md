@@ -1,6 +1,6 @@
 # 第 21 章：`async fn in trait` 的现状 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 >
 > ⚠️ **本章结论演进最快**（AFIT / RPITIT 仍在推进）。
 > 以本文件顶部的"最后验证"标注为准。
@@ -9,7 +9,7 @@
 
 ```bash
 tools/evidence.sh ch21-afit
-scripts/verify-all.sh ch21      # 8 条断言
+scripts/verify-evidence.sh ch21      # 8 条断言
 ```
 
 ## 关键结论与断言（8 条，全绿）
@@ -149,7 +149,7 @@ pub trait StoreSend {
 | RPITIT `-> impl Future + Send` | ❌ | ✅ | 无 |
 | `-> Box<dyn Future + Send>` | ✅ | ✅ | **一次堆分配** |
 
-★ **三个需求最多同时满足两个。** 这就是 1.98 上 AFIT 的现状。
+★ **三个需求最多同时满足两个。** 这就是 1.99 上 AFIT 的现状。
 
 ★ 而且 `dyn` 和 AFIT 的冲突是**根本性的**（不是"还没实现"）：
 vtable 要**固定布局**，`async fn` 的返回类型每个实现都不同。
@@ -176,7 +176,7 @@ grep -n 'fn use_store' .evidence/ch21-afit-lib.mir | head
 
 ## 待办
 
-- [x] 8 条断言全绿（`verify-all.sh ch21`）
+- [x] 8 条断言全绿（`verify-evidence.sh ch21`）
 - [x] 4 个反例落库并加断言
 - [x] 实测确认泛型路径**零分配**（"异步 trait 有开销"是错的）
 - [x] 实测确认 `Box<dyn Future>` 需要 `Box::into_pin`（第 19 章的交叉）

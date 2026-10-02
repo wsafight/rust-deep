@@ -1,12 +1,12 @@
 # 第 2 章：生命周期 —— 标注、省略与推断 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch02-lifetimes
-scripts/verify-all.sh ch02      # 8 条断言
+scripts/verify-evidence.sh ch02      # 8 条断言
 ```
 
 ## ★ 核心证据：生命周期在 codegen 里**完全不存在**
@@ -147,7 +147,7 @@ error[E0515]: cannot return value referencing local variable `local`
 
 **variance（协变/逆变/不变）无法从 codegen 层面取证**，原因：
 
-- `-Zdump-variance` 在 1.98 **不存在**（实测 `rustc -Z help` 里没有）；
+- `-Zdump-variance` 在 1.99 **不存在**（实测 `rustc -Z help` 里没有）；
 - `#[rustc_variance]` 属性已不对外可用（报 `cannot find attribute`）；
 - `RUSTC_LOG` 的 variance target 在 release 构建里被静态禁用到 `info` 级别，
   拿不到 debug 输出；

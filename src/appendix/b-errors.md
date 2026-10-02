@@ -1,12 +1,12 @@
 # 附录 B：常见编译错误逐条解读
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ `aarch64-apple-darwin`
 
 本附录按**错误码**索引本书正文里出现过的编译错误。
 每一条都给出：**原文**、**在哪一章展开**、**修法**。
 
 ★ 全书所有错误原文都是**本机实测**的 ——
-对应 `examples/*/fail/*.rs` 里的反例，并由 `scripts/verify-all.sh` 的
+对应 `examples/*/fail/*.rs` 里的反例，并由 `scripts/verify-evidence.sh` 的
 `assert_fails` 断言"必须报出这个错误码"。
 
 ---

@@ -1,18 +1,18 @@
 # 第 9 章：HRTB —— `for<'a>` 到底在量化什么 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
-> 本机工具链：`rustc 1.98.1` / `cargo 1.98.1` / LLVM 22.1.8。
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
+> 本机工具链：`rustc 1.99.0` / `cargo 1.99.0` / LLVM 23.1.1。
 
 ## 复现命令
 
 ```bash
-tools/evidence.sh ch09-hrtb      # 生成 .s / .ll / .mir / .o
-scripts/verify-all.sh ch09       # 9 条断言（PASS=11）
+tools/evidence.sh ch09-hrtb      # 生成 .s / .ll / .mir
+scripts/verify-evidence.sh ch09       # 9 条断言（PASS=11）
 ```
 
 ## 关键结论与断言（9 条，全绿）
 
-| # | 结论 | 断言（`scripts/verify-all.sh`） |
+| # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
 | 1 | 省略写法 `Fn(&str)->&str` **就是** HRTB | MIR 里 `elided::<for<'a> fn(&'a str) -> &'a str` |
 | 2 | 显式 `for<'a>` 产生**同一个**实例化 | MIR 里 `explicit::<for<'a> fn(&'a str) -> &'a str` |
@@ -99,7 +99,7 @@ _use_cb:
 
 ```asm
 _call_strong:
-	bl	__RNvCs1njKG4L9aB3_7___rustc35___rust_no_alloc_shim_is_unstable_v2
+	bl	__RNvCsdtSMxSA38aw_7___rustc35___rust_no_alloc_shim_is_unstable_v2
 	mov	w0, #5        ; "local" 的长度，编译期已知
 	ret
 

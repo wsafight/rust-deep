@@ -274,7 +274,7 @@ struct B<'a> { r: &'a str, _p: PhantomData<Cell<&'a ()>> }   // 不变：严格
 ```bash
 # 正例（全部编译过）
 tools/evidence.sh ch03-variance
-scripts/verify-all.sh ch03
+scripts/verify-evidence.sh ch03
 
 # 反例（预期失败）
 rustc --edition 2024 --crate-type=lib examples/ch03-variance/fail/invariance.rs
@@ -295,7 +295,7 @@ rustc --edition 2024 --crate-type=lib examples/ch03-variance/fail/contravariance
    —— 那是 HRTB 的痕迹。
 
 ```bash
-scripts/verify-all.sh ch03      # 7 条断言
+scripts/verify-evidence.sh ch03      # 7 条断言
 ```
 
 ## 3.6 与 unsafe 的关系

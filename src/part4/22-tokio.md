@@ -507,7 +507,7 @@ cargo run -p ch22-tokio
 
 # ★ 证据（ch22 依赖 tokio，tools/ 会通过 examples/ch22-tokio/externs 自动加 --extern）
 tools/evidence.sh ch22-tokio
-scripts/verify-all.sh ch22      # 7 条断言
+scripts/verify-evidence.sh ch22      # 7 条断言
 
 # ★ 四个函数的汇编
 for f in shared_counter blocking_work local_task rc_within_task; do
@@ -517,10 +517,11 @@ for f in shared_counter blocking_work local_task rc_within_task; do
 done
 
 # ★ 三个反例
+source tools/lib.sh
+rd_prepare_rustc_args ch22-tokio
 for f in guard_across_await rc_in_spawn borrow_local; do
   echo "--- $f ---"
-  eval rustc --edition 2024 --crate-type=lib \
-    "\$(bash -c 'source tools/lib.sh; rd_root >/dev/null; rd_extern_args ch22-tokio')" \
+  "$RD_RUSTC" "${RD_RUSTC_ARGS[@]}" --crate-type=lib \
     examples/ch22-tokio/fail/$f.rs 2>&1 | head -3
 done
 
@@ -538,7 +539,7 @@ cargo expand -p ch22-tokio | head -40
    **E0373** `async block may outlive the current function`。
 
 ★ **注意反例的编译命令**：ch22 是全书唯一依赖第三方 crate 的 example。
-`tools/lib.sh` 里的 `rd_extern_args` 会从 `examples/ch22-tokio/externs`
+`tools/lib.sh` 里的 `rd_prepare_rustc_args` 会从 `examples/ch22-tokio/externs`
 读出需要哪些 crate，再用 `cargo build --message-format=json` 找出
 `.rlib` 路径，拼出 `--extern` 和 `-L dependency=` 参数。
 

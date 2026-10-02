@@ -28,6 +28,7 @@ use std::collections::HashMap;
 // 第 1 步：最小的抽象 —— 用关联类型（第 6 章的判据）
 // ============================================================
 
+// ANCHOR: projection
 /// 一个"读模型"：能从事件流里读出投影。
 ///
 /// ★ 判据（第 6 章）：**一个 `Self` 对应几个投影类型？**
@@ -61,6 +62,7 @@ impl Projection for Count {
         events.len()
     }
 }
+// ANCHOR_END: projection
 
 #[unsafe(no_mangle)]
 pub fn use_sum(events: &[u64]) -> u64 {
@@ -190,6 +192,7 @@ pub fn use_keyed_max(events: &[(u64, u64)]) -> u64 {
 /// 需求再变：投影不想返回 `HashMap`（拷贝），而是想**借出**内部切片。
 ///
 /// 这时就要 GAT + 生命周期参数，并且**必须**写 `where Self: 'a`。
+// ANCHOR: borrowing_projection
 pub trait BorrowingProjection {
     /// ★ 生命周期参数的 GAT：`where Self: 'a` 是**强制**的（第 10 章）。
     type Out<'a>
@@ -229,6 +232,7 @@ impl BorrowingProjection for CachedSum {
         &self.cache
     }
 }
+// ANCHOR_END: borrowing_projection
 
 #[unsafe(no_mangle)]
 pub fn use_borrowed(c: &CachedSum, events: &[u64]) -> u64 {

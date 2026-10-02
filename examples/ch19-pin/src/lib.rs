@@ -63,7 +63,7 @@ impl SelfRef {
     /// "`unsafe` 的契约不写在机器码里"的典型例子：
     /// 两个逐字节等价的写法，在本章的后续写入序列中一个仍有效、一个已失效。
     ///
-    /// 实测（`cargo +nightly miri test -p ch19-pin`）：
+    /// 实测（`cargo +nightly-2026-09-16 miri test -p ch19-pin`）：
     /// - `addr_of!`     → `Undefined Behavior: ... that tag does not exist
     ///                     in the borrow stack`
     /// - `addr_of_mut!` → 通过
@@ -120,7 +120,7 @@ impl SelfRef {
 /// `stp x19, x0, [x0]` 这一条就是"自引用"的全部运行时形态：
 /// 把**分配到的地址 `x0` 本身**写进 `[x0, #8]`。
 ///
-/// ⚠️ 符号名里的 `hash`（如 `CsrtIYgyWToU`）**每次编译都会变**，
+/// ⚠️ 符号名里的 `hash`（如 `Cs8vZMNLDlXs5`）**每次编译都会变**，
 /// 引用汇编时不要把它当常量。
 #[unsafe(no_mangle)]
 pub fn make_self_ref(data: u64) -> Pin<Box<SelfRef>> {
@@ -259,7 +259,7 @@ pub async fn borrow_across_await() -> u64 {
     r.len() as u64
 }
 
-/// ★ 实测结论（1.98.1，见 `fail/future_not_unpin.rs`）：
+/// ★ 实测结论（1.99.0，见 `fail/future_not_unpin.rs`）：
 ///
 /// **所有** `async fn` / `async` 块产生的 future 都是 `!Unpin` ——
 /// 哪怕它的函数体里**一个借用都没有**、**一次 `await` 都没有**。

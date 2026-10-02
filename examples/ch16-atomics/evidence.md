@@ -1,12 +1,12 @@
 # 第 16 章：无锁与 atomics — 内存序如何落到具体指令
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch16-atomics
-scripts/verify-all.sh ch16
+scripts/verify-evidence.sh ch16
 ```
 
 ## ★ 核心证据：本章选取的 `Ordering` 在 AArch64 上体现为不同指令

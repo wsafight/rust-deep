@@ -1,7 +1,7 @@
 //! 自引用结构：**错误版本** —— 只给 Miri 跑。
 //!
 //! 复现：
-//!   cargo +nightly miri test -p ch19-pin --test selfref_ub    # 必须失败
+//!   cargo +nightly-2026-09-16 miri test -p ch19-pin --test selfref_ub    # 必须失败
 //!
 //! 这里演示的是 `Pin` 文档里那句话的**具体形态**：
 //! "保存下来的自引用指针必须与后续访问相容，不能使用已被写入作废的指针。"

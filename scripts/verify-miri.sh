@@ -14,18 +14,28 @@ cd "$(dirname "$0")/.."
 
 pass=0
 fail=0
+miri_toolchain="${MIRI_TOOLCHAIN:-nightly-2026-09-16}"
+miri_sysroot="${MIRI_SYSROOT:-$PWD/target/miri-sysroot/$miri_toolchain}"
+export MIRI_SYSROOT="$miri_sysroot"
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/rust-deep-miri.XXXXXX") || exit 1
+trap 'rm -rf -- "$tmpdir"' EXIT
 ok()  { printf '  \033[32mPASS\033[0m %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf '  \033[31mFAIL\033[0m %s\n' "$1"; fail=$((fail+1)); }
 
 printf '\n\033[1m== Miri 前置检查 ==\033[0m\n'
-if ! cargo +nightly miri --version >/dev/null 2>&1; then
-  bad "cargo +nightly miri 不可用"
-  echo "      装：rustup toolchain install nightly -c rustc -c miri -c rust-src"
-  echo "          cargo +nightly miri setup"
+if ! rustc "+${miri_toolchain}" --version >"$tmpdir/rustc-version" 2>&1; then
+  bad "${miri_toolchain} 的 rustc 不可用"
+  echo "      装：rustup toolchain install ${miri_toolchain} -c rustc -c cargo -c miri -c rust-src"
   printf '\n  PASS=%d  FAIL=%d\n' "$pass" "$fail"
   exit 1
 fi
-ok "cargo +nightly miri 可用（$(cargo +nightly miri --version)）"
+if ! cargo "+${miri_toolchain}" miri setup >"$tmpdir/setup" 2>&1; then
+  bad "${miri_toolchain} 的 Miri 无法加载 rustc 后端"
+  sed 's/^/      /' "$tmpdir/setup" | tail -20
+  printf '\n  PASS=%d  FAIL=%d\n' "$pass" "$fail"
+  exit 1
+fi
+ok "Miri 工具链可运行（${miri_toolchain} / $(cargo "+${miri_toolchain}" miri --version)）"
 
 # 通用：跑一个 Miri 测试目标，断言"必须通过"或"必须报 UB"
 #   miri_must_pass <crate> <test 名> <说明>
@@ -34,8 +44,8 @@ ok "cargo +nightly miri 可用（$(cargo +nightly miri --version)）"
 #    它会把紧跟其后的多字节字符（如 `（`）当成变量名的一部分，
 #    在 `set -u` 下直接报 unbound variable。
 miri_must_pass() {
-  local pkg="$1" t="$2" desc="$3" out="/tmp/rd-miri-${1}-${2}"
-  if cargo +nightly miri test -q -p "$pkg" --test "$t" >"$out" 2>&1; then
+  local pkg="$1" t="$2" desc="$3" out="$tmpdir/${1}-${2}.log"
+  if cargo "+${miri_toolchain}" miri test -q -p "$pkg" --test "$t" >"$out" 2>&1; then
     ok "${pkg}/${t} 在 Miri 下通过（${desc}）"
   else
     bad "${pkg}/${t} 在 Miri 下失败了（${desc}）—— 要么 Miri 误报，要么代码其实不合法"
@@ -44,8 +54,8 @@ miri_must_pass() {
 }
 
 miri_must_ub() {
-  local pkg="$1" t="$2" desc="$3" out="/tmp/rd-miri-${1}-${2}"
-  if cargo +nightly miri test -q -p "$pkg" --test "$t" >"$out" 2>&1; then
+  local pkg="$1" t="$2" desc="$3" out="$tmpdir/${1}-${2}.log"
+  if cargo "+${miri_toolchain}" miri test -q -p "$pkg" --test "$t" >"$out" 2>&1; then
     bad "${pkg}/${t} 在 Miri 下**通过了** —— 期望它报 UB（${desc}）"
   else
     # 必须是"报出 Undefined Behavior"，而不是别的错误（比如编译失败）

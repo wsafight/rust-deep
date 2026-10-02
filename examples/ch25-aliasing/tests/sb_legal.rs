@@ -1,7 +1,7 @@
 //! 看起来像 UB，其实**完全合法** —— 用来证明 Miri 不会误报。
 //!
 //! 复现：
-//!   cargo +nightly miri test -p ch25-aliasing --test sb_legal   # 应通过
+//!   cargo +nightly-2026-09-16 miri test -p ch25-aliasing --test sb_legal   # 应通过
 
 /// 两个 `&u64` 别名同一块内存：安全 Rust 允许，LLVM 的 `noalias` 也不禁止。
 ///

@@ -1,7 +1,7 @@
 # 第 23 章（实战）：mini async runtime — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
-> Miri：`miri 0.1.0 (923c95cdf5 2026-09-16)`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
+> Miri：`miri 0.1.0 (215a8af4bb 2026-09-15)`
 
 ## 复现命令
 
@@ -16,12 +16,12 @@ cargo run -p ch23-project-runtime
 cargo test -p ch23-project-runtime
 
 # ★★ Miri：手写 waker 的引用计数配平
-cargo +nightly miri test -p ch23-project-runtime --test scheduler
+cargo +nightly-2026-09-16 miri test -p ch23-project-runtime --test scheduler
 # 或统一入口：scripts/verify-miri.sh
 
 # ★ 证据
 tools/evidence.sh ch23-project-runtime
-scripts/verify-all.sh ch23      # 5 条断言
+scripts/verify-evidence.sh ch23      # 5 条断言
 ```
 
 ## 关键结论与断言（5 条，全绿）
@@ -139,7 +139,7 @@ fn task_waker(task: &Arc<Task>) -> Waker {
 ### 谁能检查它：Miri
 
 ```bash
-$ cargo +nightly miri test -p ch23-project-runtime --test scheduler
+$ cargo +nightly-2026-09-16 miri test -p ch23-project-runtime --test scheduler
 running 6 tests
 ......
 test result: ok. 6 passed; 0 failed
@@ -244,14 +244,14 @@ pub fn run_local() -> u64 {
 ```bash
 cargo run -p ch23-project-runtime
 cargo test -p ch23-project-runtime
-cargo +nightly miri test -p ch23-project-runtime --test scheduler
+cargo +nightly-2026-09-16 miri test -p ch23-project-runtime --test scheduler
 awk '/^_run_three:/{on=1} on{print} on&&/cfi_endproc/{exit}' \
   .evidence/ch23-project-runtime-lib.O3.s | grep -E 'rust_alloc|ldadd|grow'
 ```
 
 ## 待办
 
-- [x] 5 条断言全绿（`verify-all.sh ch23`）
+- [x] 5 条断言全绿（`verify-evidence.sh ch23`）
 - [x] 6 个调度行为测试（含"漏掉 waker 就丢任务"和"跨线程唤醒"）
 - [x] 接入 `scripts/verify-miri.sh`（手写 waker 的引用计数配平）
 - [x] 运行期演示三条输出

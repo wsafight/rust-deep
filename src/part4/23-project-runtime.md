@@ -132,10 +132,7 @@ unsafe { Waker::from_raw(RawWaker::new(data, &VTABLE)) }
 ### 23.2.2 `Task`：三个字段各有来历
 
 ```rust,ignore
-pub struct Task {
-    future: Mutex<Option<Pin<Box<dyn Future<Output = ()> + Send>>>>,
-    executor: Weak<Executor>,
-}
+{{#include ../../examples/ch23-project-runtime/src/lib.rs:task}}
 ```
 
 **逐字段读**：
@@ -157,18 +154,7 @@ pub struct Task {
 ### 23.2.3 ★ 刻意下潜的 `unsafe`：`RawWakerVTable` 的四个函数
 
 ```rust,ignore
-fn task_waker(task: &Arc<Task>) -> Waker {
-    unsafe fn clone(data: *const ()) -> RawWaker { /* 增加引用计数 */ }
-    unsafe fn wake(data: *const ()) { /* 消耗一个引用计数 */ }
-    unsafe fn wake_by_ref(data: *const ()) { /* 不消耗 */ }
-    unsafe fn drop_waker(data: *const ()) { /* 减少引用计数 */ }
-
-    static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop_waker);
-
-    let raw = Arc::into_raw(Arc::clone(task)) as *const ();
-    // SAFETY: raw 来自 Arc::into_raw，vtable 的四个函数满足下面列出的契约
-    unsafe { Waker::from_raw(RawWaker::new(raw, &VTABLE)) }
-}
+{{#include ../../examples/ch23-project-runtime/src/lib.rs:task_waker}}
 ```
 
 **四个函数的契约**：
@@ -191,7 +177,7 @@ fn task_waker(task: &Arc<Task>) -> Waker {
 ★ **Miri 能检查这件事**（`scripts/verify-miri.sh`）：
 
 ```bash
-cargo +nightly miri test -p ch23-project-runtime --test scheduler
+cargo +nightly-2026-09-16 miri test -p ch23-project-runtime --test scheduler
 # 6 passed —— 含一个跨线程唤醒的用例
 ```
 
@@ -201,11 +187,7 @@ Miri 可以在这些测试路径上发现由引用计数错误引起的泄漏或
 ### 23.2.4 在这个 executor 里，`wake` 的效果是入队
 
 ```rust,ignore
-fn wake_task(task: Arc<Task>) {
-    if let Some(exec) = task.executor.upgrade() {
-        exec.ready.lock().unwrap().push_back(task);
-    }
-}
+{{#include ../../examples/ch23-project-runtime/src/lib.rs:wake_task}}
 ```
 
 ★ 对这个教学实现来说，唤醒的直接效果就是入队。生产 runtime 往往还会
@@ -217,14 +199,7 @@ fn wake_task(task: Arc<Task>) {
 ### 23.2.5 `run`：最小调度循环只有几行
 
 ```rust,ignore
-pub fn run(&self) {
-    loop {
-        let Some(task) = self.ready.lock().unwrap().pop_front() else {
-            return;
-        };
-        let _pending = task.poll();
-    }
-}
+{{#include ../../examples/ch23-project-runtime/src/lib.rs:executor_run}}
 ```
 
 ```asm
@@ -238,7 +213,7 @@ _run_three:
 	bl	...VecDeque...grow    ; ★ 队列增长
 ```
 
-**下面三种实现痕迹都能在汇编里找到**（`verify-all.sh ch23`）：
+**下面三种实现痕迹都能在汇编里找到**（`verify-evidence.sh ch23`）：
 
 | 断言 | 说明 |
 |---|---|
@@ -445,11 +420,11 @@ cargo run -p ch23-project-runtime
 cargo test -p ch23-project-runtime
 
 # ★★ Miri：验证手写 waker 的引用计数配平（含跨线程唤醒）
-cargo +nightly miri test -p ch23-project-runtime --test scheduler
+cargo +nightly-2026-09-16 miri test -p ch23-project-runtime --test scheduler
 
 # ★ 证据
 tools/evidence.sh ch23-project-runtime
-scripts/verify-all.sh ch23      # 5 条断言
+scripts/verify-evidence.sh ch23      # 5 条断言
 ```
 
 **怎么算验证成功**：
@@ -457,7 +432,7 @@ scripts/verify-all.sh ch23      # 5 条断言
 1. `cargo run` 输出 **`order = [0, 1, 2]`** —— 调度行为可预测；
 2. `cargo test` **6 个用例全绿**，其中包括
    `pending_without_wake_is_lost`（证明"漏掉 waker 就丢任务"）；
-3. **`cargo +nightly miri test` 全绿** —— 在这些测试路径和当前 Miri
+3. **`cargo +nightly-2026-09-16 miri test` 全绿** —— 在这些测试路径和当前 Miri
    可检查范围内，没有发现手写 waker 的引用计数或内存错误；
 4. `run_three` 的汇编里有 `___rust_alloc`、`ldadd`、`VecDeque...grow`
    —— 任务真的在堆上、引用计数真的走原子操作、队列真的会增长。
@@ -495,7 +470,7 @@ unsafe fn wake(data: *const ())
 ### 谁能检查它：Miri
 
 ```bash
-cargo +nightly miri test -p ch23-project-runtime --test scheduler
+cargo +nightly-2026-09-16 miri test -p ch23-project-runtime --test scheduler
 ```
 
 Miri 能发现这些测试路径上由错误引用计数引起的泄漏或无效访问，

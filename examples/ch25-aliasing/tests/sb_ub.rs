@@ -4,7 +4,7 @@
 //! （UB 在普通运行下不一定当场崩，混进常规测试会让 CI 不稳定）。
 //!
 //! 复现：
-//!   cargo +nightly miri test -p ch25-aliasing --test sb_ub   # 必须失败
+//!   cargo +nightly-2026-09-16 miri test -p ch25-aliasing --test sb_ub   # 必须失败
 
 #![cfg(miri)]
 

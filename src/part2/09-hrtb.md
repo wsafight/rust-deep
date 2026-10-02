@@ -224,7 +224,7 @@ LLVM 判定这三个函数**逐位等价**，把前两个直接变成 alias。
 
 ```asm
 _call_strong:
-	bl	__RNvCs1njKG4L9aB3_7___rustc35___rust_no_alloc_shim_is_unstable_v2
+	bl	__RNvCsdtSMxSA38aw_7___rustc35___rust_no_alloc_shim_is_unstable_v2
 	mov	w0, #5        ; "local" 的长度，编译期已知
 	ret
 
@@ -385,7 +385,7 @@ pub fn total_visits<T: for<'a> Visitor<'a>>(t: &T) -> usize { ... }
 
 ```bash
 tools/evidence.sh ch09-hrtb
-scripts/verify-all.sh ch09
+scripts/verify-evidence.sh ch09
 
 # ★ 最强的一条：省略写法在 MIR 里就是 for<'a>
 grep -n "for<'" .evidence/ch09-hrtb-lib.mir
@@ -412,7 +412,7 @@ awk '/^_use_cb:/,/cfi_endproc/' .evidence/ch09-hrtb-lib.O3.s
    —— HRTB 管不了方法自己的签名。
 
 ```bash
-scripts/verify-all.sh ch09      # 9 条断言
+scripts/verify-evidence.sh ch09      # 9 条断言
 ```
 
 ## 9.6 与 unsafe 的关系

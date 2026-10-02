@@ -60,7 +60,7 @@ pub fn sum_unchecked(v: &[u64]) -> u64 {
 **你付出的代价**：一段 `unsafe`、一条 `SAFETY` 论证、
 以及"以后有人改这个循环时可能破坏不变量"的风险。
 
-**你换来的东西**，实测（`-O` / `aarch64-apple-darwin` / rustc 1.98.1）：
+**你换来的东西**，实测（`-O` / `aarch64-apple-darwin` / rustc 1.99.0）：
 
 ```asm
 _sum_unchecked = _sum_safe
@@ -371,7 +371,7 @@ benchmark：这个差值对整体有影响吗？
 
 ```bash
 tools/evidence.sh ch26-when-not-to
-scripts/verify-all.sh ch26      # 10 条断言
+scripts/verify-evidence.sh ch26      # 10 条断言
 
 # ★ 安全版本与 unsafe 版本是同一个函数
 grep '^_sum_unchecked = \|^_masked_unchecked = ' .evidence/ch26-when-not-to-lib.O3.s
@@ -433,7 +433,7 @@ awk '/^_raw_double_add:/{on=1}  on{print} on&&/cfi_endproc/{exit}' .evidence/ch2
 1. **`SAFETY` 注释**：指出依赖哪条契约、为什么没破坏它（第 24 章）；
 2. **前提检查**：能变成 `assert` 的就变成 `assert` —— panic 不是 UB；
 3. **`unsafe` 块尽量小**：一块只做一件事；
-4. **Miri**：`cargo +nightly miri test`（第 19、25 章）；
+4. **Miri**：`cargo +nightly-2026-09-16 miri test`（第 19、25 章）；
 5. **把 `unsafe` 收进边界**：对外的接口应该是安全的。
 
 ### 三条"看起来对"的写法

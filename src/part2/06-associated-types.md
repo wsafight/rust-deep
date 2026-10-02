@@ -278,7 +278,7 @@ fn make() -> impl Iterator<Item = u64> { 0..10 }
 
 ```bash
 tools/evidence.sh ch06-associated-types
-scripts/verify-all.sh ch06
+scripts/verify-evidence.sh ch06
 
 # 反例
 rustc --edition 2024 --crate-type=lib examples/ch06-associated-types/fail/conflicting_impl.rs
@@ -296,7 +296,7 @@ rustc --edition 2024 --crate-type=lib examples/ch06-associated-types/fail/ambigu
    —— 两者都是静态分发。
 
 ```bash
-scripts/verify-all.sh ch06      # 7 条断言
+scripts/verify-evidence.sh ch06      # 7 条断言
 ```
 
 ## 6.6 与 unsafe 的关系

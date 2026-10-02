@@ -1,6 +1,6 @@
 # 附录 C：延伸阅读
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）
+> 最后验证：**rustc 1.99.0**（2026-09-28）
 
 本书的目标是"把结论钉在可复现的证据上"。
 如果你想**继续往下走** —— 去读产生这些结论的源头 —— 这个附录是路线图。
@@ -52,7 +52,7 @@ grep -rn "SAFETY" $S/alloc/src/ | head -40
 **规范性的**（不是教程）。本书用到它的地方：
 
 - 生命周期省略规则（第 2 章）；
-- dyn compatibility 的定义（第 7 章，注意 1.98 里叫
+- dyn compatibility 的定义（第 7 章，注意 1.99 里叫
   "dyn compatible"，旧的 "object safe" 已改名）；
 - 孤儿规则与 `#[fundamental]`（第 8 章）；
 - HRTB 的语法（第 9 章）。
@@ -66,7 +66,7 @@ grep -rn "SAFETY" $S/alloc/src/ | head -40
 **"The Dark Arts of Unsafe Rust"** —— 第 24–26 章的官方对应物。
 
 它比本书更"规范"，但**更新较慢**，有些地方已经过时
-（比如它讲 retag 的方式与 1.98 的实际实现有出入 —— 见第 25 章）。
+（比如它讲 retag 的方式与 1.99 的实际实现有出入 —— 见第 25 章）。
 读它时保持"回到源码验证"的习惯。
 
 ### Unsafe Code Guidelines
@@ -96,9 +96,9 @@ grep -rn "SAFETY" $S/alloc/src/ | head -40
 ★ 值得知道的几个 flag：
 
 ```bash
-cargo +nightly miri test                        # 默认：Stacked Borrows
-MIRIFLAGS="-Zmiri-tree-borrows" cargo +nightly miri test   # 换模型
-MIRIFLAGS="-Zmiri-backtrace=full" cargo +nightly miri test # 完整回溯
+cargo +nightly-2026-09-16 miri test                        # 默认：Stacked Borrows
+MIRIFLAGS="-Zmiri-tree-borrows" cargo +nightly-2026-09-16 miri test   # 换模型
+MIRIFLAGS="-Zmiri-backtrace=full" cargo +nightly-2026-09-16 miri test # 完整回溯
 ```
 
 ### cargo-expand

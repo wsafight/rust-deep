@@ -1,12 +1,12 @@
 # 第 5 章实战：树 / 图容器 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch05-project-tree
-scripts/verify-all.sh ch05
+scripts/verify-evidence.sh ch05
 ```
 
 ## ★ 核心对照：`Rc<RefCell<>>` vs arena + 索引

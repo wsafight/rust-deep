@@ -1,12 +1,12 @@
 # 第 26 章：何时**不该**用 `unsafe` — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch26-when-not-to
-scripts/verify-all.sh ch26      # 10 条断言
+scripts/verify-evidence.sh ch26      # 10 条断言
 ```
 
 ## 关键结论与断言（10 条，全绿）
@@ -208,7 +208,7 @@ done
 
 ## 待办
 
-- [x] 10 条断言全绿（`verify-all.sh ch26`）
+- [x] 10 条断言全绿（`verify-evidence.sh ch26`）
 - [x] 三组对照落库（两组 alias、一组有差值）
 - [x] 复用了第 24 章的 `safe_double_add` / `raw_double_add` 作为"更慢"的反例
 - [ ] 若将来接 criterion，可以对第三组（外部索引）做真实的 benchmark ——

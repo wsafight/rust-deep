@@ -182,7 +182,7 @@ pub fn write_then_read(v: u64) -> u64 {
 /// ★ `--emit=mir` 里出现的 `no_retag` **不是** retag 的证据，恰恰相反 ——
 /// 它是"这里**不**做 retag"的标记。
 ///
-/// 机制（读 rustc 1.98 源码确认）：
+/// 机制（读 rustc 1.99 源码确认）：
 /// - `Rvalue::Use` 带一个 `WithRetag::Yes/No` 标志
 ///   （`rustc_middle/src/mir/syntax.rs`）；
 /// - pretty printer **只在 `No` 时**打印 `no_retag`
@@ -194,7 +194,7 @@ pub fn write_then_read(v: u64) -> u64 {
 /// 源码注释：*"We do **NOT** want a retag here!"*）和 `DerefSeparator`。
 ///
 /// ★ 更关键：**`-Zdump-mir`（逐 pass dump）里也看不到 retag** ——
-/// 1.98 的 pass 列表里根本没有 `AddRetag`；retag 是 **codegen 阶段**的事。
+/// 1.99 的 pass 列表里根本没有 `AddRetag`；retag 是 **codegen 阶段**的事。
 ///
 /// 这个函数的作用就是**让读者亲眼看到 `no_retag` 长什么样、出现在哪**，
 /// 然后据此理解"为什么不能拿它当 retag 的证据"。

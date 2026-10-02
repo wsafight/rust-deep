@@ -1,19 +1,19 @@
 # 第 8 章：coherence、孤儿规则与 blanket impl — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
-> 本机工具链：`rustc 1.98.1` / `cargo 1.98.1` / LLVM 22.1.8。
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
+> 本机工具链：`rustc 1.99.0` / `cargo 1.99.0` / LLVM 23.1.1。
 
 ## 复现命令
 
 ```bash
-tools/evidence.sh ch08-coherence     # 生成 .s / .ll / .mir / .o
-scripts/verify-all.sh ch08            # 11 条断言（PASS=13，含编译 + 证据生成各 1 条）
+tools/evidence.sh ch08-coherence     # 生成 .s / .ll / .mir
+scripts/verify-evidence.sh ch08            # 11 条断言（PASS=13，含编译 + 证据生成各 1 条）
 tools/objdump.sh ch08-coherence 3     # 反汇编（带 --demangle，符号可读）
 ```
 
 ## 关键结论与断言（11 条，全绿）
 
-| # | 结论 | 断言（`scripts/verify-all.sh`） |
+| # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
 | 1 | 本地 trait + 外部类型：合法 | `^_use_my_display:` |
 | 2 | 外部 trait + 本地类型（newtype）：合法 | `^_use_wrapped:` |
@@ -158,7 +158,7 @@ grep -c 'my_debug' .evidence/ch08-coherence-lib.O3.ll    # → 0
 ★ 注意 `.O3.ll` 里的 `!dbg` 元数据**仍然保留**了原始符号名：
 
 ```llvm
-!65 = distinct !{!65, !"_RNvXs1_CsrtIYgyWToU_3libINtNtCshxvaOLs88l5_5alloc3vec3VecyENtB5_7MyDebug8my_debugB5_"}
+!65 = distinct !{!65, !"_RNvXs1_Cs8vZMNLDlXs5_3libINtNtCs6zY7rJBZy9D_5alloc3vec3VecyENtB5_7MyDebug8my_debugB5_"}
 ```
 
 —— 但这只是调试信息（`.ll` 里需要 `-C debuginfo`），

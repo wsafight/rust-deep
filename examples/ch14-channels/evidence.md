@@ -1,17 +1,17 @@
 # 第 14 章：消息传递 —— 发送即 move，编译期切断别名 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch14-channels
-scripts/verify-all.sh ch14       # 4 条断言（PASS=6）
+scripts/verify-evidence.sh ch14       # 4 条断言（PASS=6）
 ```
 
 ## 关键结论与断言（4 条，全绿）
 
-| # | 结论 | 断言（`scripts/verify-all.sh`） |
+| # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
 | 1 | `send` 按值拿走所有权（MIR 里是 move） | `Sender::<String>::send(move _9, move _10)` |
 | 2 | ★ 发送前先把局部变量 move 出来 | `.mir` 里 `_10 = move _4` |
@@ -106,16 +106,16 @@ grep -oE 'mpmc[a-zA-Z0-9_]*|sync4mpsc' .evidence/ch14-channels-lib.O3.s | sort |
 ```text
     192 sync4mpmc
      27 sync4mpsc
-     17 mpmc4zero5InnerEECsrtIYgyWToU_3lib
-     16 mpmc5waker5WakerEECsrtIYgyWToU_3lib
+     17 mpmc4zero5InnerEECs8vZMNLDlXs5_3lib
+     16 mpmc5waker5WakerEECs8vZMNLDlXs5_3lib
 ```
 
 具体的符号：
 
 ```text
-__RNvMNtNtNtCs82bWklYMk3w_3std4sync4mpmc7contextNtB2_7Context3new
-__RNvMsn_NtCshxvaOLs88l5_5alloc4syncINtB5_3ArcNtNtNtNtCs82bWklYMk3w_3std4sync4mpmc7context5InnerE9drop_slow...
-__RNvMs0_NtNtNtCs82bWklYMk3w_3std4sync4mpmc5wakerNtB5_9SyncWaker10disconnect
+__RNvMNtNtNtCs1SSuMAdGM58_3std4sync4mpmc7contextNtB2_7Context3new
+__RNvMsn_NtCs6zY7rJBZy9D_5alloc4syncINtB5_3ArcNtNtNtNtCs1SSuMAdGM58_3std4sync4mpmc7context5InnerE9drop_slow...
+__RNvMs0_NtNtNtCs1SSuMAdGM58_3std4sync4mpmc5wakerNtB5_9SyncWaker10disconnect
 ```
 
 ★ **`sync4mpmc` 出现 192 次，`sync4mpsc` 只有 27 次。**
@@ -123,7 +123,7 @@ __RNvMs0_NtNtNtCs82bWklYMk3w_3std4sync4mpmc5wakerNtB5_9SyncWaker10disconnect
 （`mpmc::zero::Inner`、`mpmc::waker::Waker`、`mpmc::context::Context`）。
 
 > **对写作的影响**：很多关于 `mpsc` 的旧资料会讲
-> "内部是一个基于 `Mutex` 的链表队列"。**在 1.98 上已经不是这样了。**
+> "内部是一个基于 `Mutex` 的链表队列"。**在 1.99 上已经不是这样了。**
 > 写正文时不要按旧实现描述内部结构。
 >
 > **方法论的收获**：这条结论不是从文档里读来的，

@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # 输出反汇编（从 .o 看真实编码）
 # 用法: tools/objdump.sh <example 名 | .rs 文件> [opt-level]
-#   RD_NO_DUMP=1  只生成 .o，不打印反汇编（供 evidence.sh 调用）
+#   RD_NO_DUMP=1  只生成 .o，不打印反汇编
+set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 rd_root
 src=$(rd_resolve_src "${1:?usage: objdump.sh <example|file.rs> [opt]}")
 opt="${2:-3}"
 obj=$(rd_outdir)/"$(rd_prefix)$(basename "${src%.rs}")".O"$opt"$(rd_target_suffix).o
+rd_prepare_rustc_args "$(rd_example_name "$src")"
 
-"$RD_RUSTC" --edition="$RD_EDITION" $(rd_target_arg) \
-  $(rd_extern_args "$(rd_example_name "$src")") \
+"$RD_RUSTC" "${RD_RUSTC_ARGS[@]}" \
   -C opt-level="$opt" --emit "obj=$obj" --crate-type=lib "$src"
 
 echo "OBJ    -> $obj" >&2

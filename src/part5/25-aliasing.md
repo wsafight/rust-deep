@@ -140,7 +140,7 @@ error: Undefined Behavior: trying to retag from <N> for SharedReadOnly permissio
 | `let p = (a,); let q = black_box(p); **q.0` | ✅ `no_retag` |
 | `&Box<u64>` 解引用、`&mut &mut u64` 重借用 | ✅ `no_retag` |
 
-**看起来"有 retag 的地方反而不打印"，很反直觉。** 机制（读 rustc 1.98 源码确认）：
+**看起来"有 retag 的地方反而不打印"，很反直觉。** 机制（读 rustc 1.99 源码确认）：
 
 1. `Rvalue::Use` 带一个 `WithRetag::Yes/No` 标志
    （`rustc_middle/src/mir/syntax.rs`）；
@@ -158,7 +158,7 @@ stable 上 `no_retag` 只有两个来源：`EraseDerefTemps`
 *"We do **NOT** want a retag here!"*）和 `DerefSeparator`。
 
 **更关键的一条**：`-Zdump-mir`（逐 pass dump）**也看不到 retag** ——
-1.98 的 pass 列表里根本没有 `AddRetag`。**retag 是 codegen 阶段的事**。
+1.99 的 pass 列表里根本没有 `AddRetag`。**retag 是 codegen 阶段的事**。
 
 （要看 retag 真的生成了代码，用 `-Zcodegen-emit-retag`（需 nightly）——
 汇编里会出现 `bl ___rust_retag_reg`。）
@@ -374,7 +374,7 @@ pub struct Handle<'a> { ptr: *mut u64, _p: PhantomData<&'a u64> }   // 补回来
 
 > `--emit=mir` 里的 `no_retag` 恰恰是"这里**不**做 retag"。
 > 做了 retag 的地方**静默**（`WithRetag::Yes` 不打印任何东西）。
-> 而且 retag 在 1.98 里是 **codegen 阶段**的事，
+> 而且 retag 在 1.99 里是 **codegen 阶段**的事，
 > 任何 MIR 打印（`--emit=mir` 或 `-Zdump-mir`）都看不到。
 
 ★ 这个教训值得单独记住：**"我在输出里看到了 X"不等于"X 在这里发生"。**
@@ -477,7 +477,7 @@ rustc --edition 2024 --crate-type=lib examples/ch25-aliasing/fail/write_through_
 
 ★ 自己动手验证 25.2.4 那条顺序规则，最快的办法是把
 `tests/aliasing.rs` 的 `write_then_read_is_fine` 里两行**换个位置**，
-然后跑 `cargo +nightly miri test -p ch25-aliasing --test aliasing` ——
+然后跑 `cargo +nightly-2026-09-16 miri test -p ch25-aliasing --test aliasing` ——
 **会从通过变成 UB。**
 
 ## 25.6 与 unsafe 的关系
@@ -522,7 +522,7 @@ struct Handle<'a, T> { p: *mut T, _m: PhantomData<&'a UnsafeCell<T>> }
 2. 有没有 `&T` 在写入之前建立、在写入之后还活着？
 3. 裸指针字段配的 `PhantomData` 对不对？
 4. `SAFETY` 注释里写清楚"我依赖哪条规则、为什么没破坏它"了吗？
-5. **Miri 跑了吗？**（`cargo +nightly miri test`）
+5. **Miri 跑了吗？**（`cargo +nightly-2026-09-16 miri test`）
 
 第 26 章会换个角度：**什么时候根本不该用 `unsafe`。**
 
@@ -539,7 +539,7 @@ struct Handle<'a, T> { p: *mut T, _m: PhantomData<&'a UnsafeCell<T>> }
   （生命周期 / drop check / auto trait / variance），不制造 Miri 权限，
   也不改变裸指针的 provenance。是否需要它取决于类型要表达的所有权和借用关系。
 - **★ 本章的证据来自 Miri，不是 MIR**：
-  retag 在 1.98 里是 **codegen 阶段**的事，任何 MIR 打印都看不到。
+  retag 在 1.99 里是 **codegen 阶段**的事，任何 MIR 打印都看不到。
   `--emit=mir` 里的 `no_retag` 恰恰是"这里**不**做 retag"的标记。
 - **rustc 的 `invalid_reference_casting` lint 是 `deny` 默认**，
   但它只能看见同一函数体内的铸型链 —— 跨函数就漏。

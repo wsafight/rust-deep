@@ -378,7 +378,7 @@ async fn no_await(a: u64) -> u64 { a }
 
 ```bash
 tools/evidence.sh ch18-future
-scripts/verify-all.sh ch18
+scripts/verify-evidence.sh ch18
 
 # ★ async fn 的返回类型 + 函数体（只有构造）
 grep -n 'fn two_awaits' -A 8 .evidence/ch18-future-lib.mir
@@ -404,7 +404,7 @@ cargo expand -p ch18-future        # 看展开后的 async fn（仍是 async 关
 4. `size_of_two_awaits()` = 56，`size_of_no_await()` = 16。
 
 ```bash
-scripts/verify-all.sh ch18      # 11 条断言
+scripts/verify-evidence.sh ch18      # 11 条断言
 ```
 
 ## 18.6 与 unsafe 的关系
@@ -429,7 +429,7 @@ unsafe { Waker::from_raw(RawWaker::new(std::ptr::null(), &VTABLE)) }
 `Waker` 的接口完全安全，但构造它需要 `unsafe` ——
 因为你要**承诺**那四个函数的行为符合 `RawWakerVTable` 的契约。
 
-★ 在 1.98 上，标准库提供了 **`Waker::noop()`**，
+★ 在 1.99 上，标准库提供了 **`Waker::noop()`**，
 不需要手写这个 vtable（上面 `lazy_demo.rs` 用的就是它）。
 手写版本仍然值得看，因为它把"`unsafe` 承诺的是什么"摆在明面上。
 

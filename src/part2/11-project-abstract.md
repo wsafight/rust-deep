@@ -52,16 +52,7 @@ trait Projection {
 ## 11.1 第 1 步：最小的抽象 —— 关联类型
 
 ```rust
-pub trait Projection {
-    type Out;
-    fn project(&self, events: &[u64]) -> Self::Out;
-}
-
-pub struct Sum;
-impl Projection for Sum { type Out = u64; fn project(&self, e: &[u64]) -> u64 { e.iter().sum() } }
-
-pub struct Count;
-impl Projection for Count { type Out = usize; fn project(&self, e: &[u64]) -> usize { e.len() } }
+{{#include ../../examples/ch11-project-abstract/src/lib.rs:projection}}
 ```
 
 **为什么是关联类型而不是泛型参数？** 用第 6 章的判据走一遍：
@@ -112,7 +103,7 @@ pub fn sum_dyn(events: &[u64], p: &dyn Projection<Out = u64>) -> u64 {
 `sum_dyn`（符号导出，编译器不知道调用者是谁）的完整函数体（`-O`）：
 
 ```asm
-__RNvCsrtIYgyWToU_3lib7sum_dyn:
+__RNvCs8vZMNLDlXs5_3lib7sum_dyn:
 	mov	x8, x1
 	mov	x1, x0
 	ldr	x3, [x3, #24]     ; ← vtable 偏移 24（与第 7 章完全一致）
@@ -153,7 +144,7 @@ LLVM **完全去虚化**了：它知道 `p` 就是 `&Sum`，
 
 ★ 这条断言必须限定在**函数体内**：`.O3.s` 里有几百个符号，
 `br x?` 到处都是，全文件 grep 说明不了任何事。
-为此给 `verify-all.sh` 加了第四种断言类型
+为此给 `verify-evidence.sh` 加了第四种断言类型
 **`assert_fn_contains` / `assert_fn_not_contains`**
 （awk 取 `^符号:` 到 `cfi_endproc` 之间的函数体）。
 
@@ -236,19 +227,8 @@ impl KeyedProjection for KeyedSum {
 
 需求：投影不想返回 `HashMap`（拷贝），而是想**借出**内部缓存。
 
-```rust
-pub trait BorrowingProjection {
-    /// ★ 生命周期参数的 GAT：`where Self: 'a` 是**强制**的（第 10 章）。
-    type Out<'a> where Self: 'a;
-    fn project_borrowed<'a>(&'a self, events: &'a [u64]) -> Self::Out<'a>;
-}
-
-pub struct CachedSum { cache: Vec<u64> }
-
-impl BorrowingProjection for CachedSum {
-    type Out<'a> = &'a [u64] where Self: 'a;      // ← 借自 self
-    fn project_borrowed<'a>(&'a self, _: &'a [u64]) -> &'a [u64] { &self.cache }
-}
+```rust,ignore
+{{#include ../../examples/ch11-project-abstract/src/lib.rs:borrowing_projection}}
 ```
 
 这正是第 10 章 `Chunks` 那个例子的形状：
@@ -357,10 +337,10 @@ Rust 的 specialization 是更大的语言设计问题，目前仍未稳定；�
 
 ```bash
 tools/evidence.sh ch11-project-abstract
-scripts/verify-all.sh ch11
+scripts/verify-evidence.sh ch11
 
 # dyn 的真实代价（6 条指令，函数体内）
-awk '/^__RNvCsrtIYgyWToU_3lib7sum_dyn:/,/cfi_endproc/' .evidence/ch11-project-abstract-lib.O3.s
+awk '/^__RNvCs.*_3lib7sum_dyn:/,/cfi_endproc/' .evidence/ch11-project-abstract-lib.O3.s
 
 # ★ 去虚化：0 次间接跳转
 awk '/^_use_dyn:/,/cfi_endproc/' .evidence/ch11-project-abstract-lib.O3.s \
@@ -378,7 +358,7 @@ awk '/^_use_dyn:/,/cfi_endproc/' .evidence/ch11-project-abstract-lib.O3.s \
 5. `fail/too_weak_bound.rs` 报 **E0597**。
 
 ```bash
-scripts/verify-all.sh ch11      # 10 条断言
+scripts/verify-evidence.sh ch11      # 10 条断言
 ```
 
 ## 11.9 与 unsafe 的关系

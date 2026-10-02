@@ -1,7 +1,7 @@
 //! 别名规则：**违反**用例 —— 只给 Miri 跑（必须报 UB）。
 //!
 //! 复现：
-//!   cargo +nightly miri test -p ch25-aliasing --test aliasing_ub    # 必须失败
+//!   cargo +nightly-2026-09-16 miri test -p ch25-aliasing --test aliasing_ub    # 必须失败
 //!
 //! `#![cfg(miri)]` 让整个文件在普通 `cargo test` 下**不存在** ——
 //! 因为 UB 在普通运行下不一定当场崩，混进常规测试会让 CI 不稳定。

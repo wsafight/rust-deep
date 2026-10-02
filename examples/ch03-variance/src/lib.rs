@@ -3,7 +3,7 @@
 //! 证据生成：tools/evidence.sh ch03-variance
 //!
 //! ⚠️ **本章的证据层只有"能编译 / 不能编译"**：
-//! variance 在 1.98 里**没有可用的 dump 工具**
+//! variance 在 1.99 里**没有可用的 dump 工具**
 //! （`-Zdump-variance` 不存在、`#[rustc_variance]` 已不对外可用、
 //! `RUSTC_LOG` 的 variance target 在 release 构建里被静态禁用），
 //! 而且 variance 本身**不产生任何代码**。

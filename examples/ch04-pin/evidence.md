@@ -1,12 +1,12 @@
 # 第 4 章：自引用结构与 Pin 的前置知识 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch04-pin
-scripts/verify-all.sh ch04      # 6 条断言
+scripts/verify-evidence.sh ch04      # 6 条断言
 ```
 
 ## ★ 证据 1：`Pin<&mut T>` 是**零成本**的

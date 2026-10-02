@@ -67,7 +67,7 @@ println!("{}", a.len());          // ← a 还能用
 本章要给的是一条可执行的答案：
 
 ```bash
-awk '/^__RNvCsrtIYgyWToU_3lib9clone_arc:/,/cfi_endproc/' .evidence/ch13-arc-mutex-lib.O3.s
+awk '/^__RNvCs8vZMNLDlXs5_3lib9clone_arc:/,/cfi_endproc/' .evidence/ch13-arc-mutex-lib.O3.s
 ```
 
 ## 13.2 编译器眼里的样子
@@ -75,7 +75,7 @@ awk '/^__RNvCsrtIYgyWToU_3lib9clone_arc:/,/cfi_endproc/' .evidence/ch13-arc-mute
 ### 13.2.1 `clone_arc` 包装函数的完整函数体
 
 ```asm
-__RNvCsrtIYgyWToU_3lib9clone_arc:
+__RNvCs8vZMNLDlXs5_3lib9clone_arc:
 	ldr	x8, [x0]         ; ① 取出 ArcInner 指针
 	mov	w9, #1
 	ldadd	x9, x9, [x8]     ; ② ★ 原子加 1（fetch-add），返回旧值
@@ -92,7 +92,7 @@ __RNvCsrtIYgyWToU_3lib9clone_arc:
 	b.ne	LBB3_3
 	dmb	ishld            ; ⑥ ★ 内存屏障：drop_slow 前的 acquire 语义
 	add	x0, sp, #8
-	bl	__RNvMsn_NtCshxvaOLs88l5_5alloc4syncINtB5_3ArcyE9drop_slowCsrtIYgyWToU_3lib
+	bl	__RNvMsn_NtCs6zY7rJBZy9D_5alloc4syncINtB5_3ArcyE9drop_slowCs8vZMNLDlXs5_3lib
 LBB3_3:
 	mov	x0, x19
 	ldp	x29, x30, [sp, #32]
@@ -129,7 +129,7 @@ ArcInner<T> 的布局（AArch64，64 位）：
 
 **为什么是 16？** 因为前面有两个 `AtomicUsize`（各 8 字节）。
 
-> 这是当前 rustc 1.98.1 / AArch64 产物的实现观察，不是 `Arc` 的稳定 ABI。
+> 这是当前 rustc 1.99.0 / AArch64 产物的实现观察，不是 `Arc` 的稳定 ABI。
 > `ldr x19, [x8, #16]` 能证明本次构建的偏移，不能约束未来版本。
 
 ### 13.2.3 `ldadd` 而不是 `ldaddal` —— 一个重要的细节
@@ -208,7 +208,7 @@ _lock_mutex:
 	...
 	ldapr	x0, [x0]          ; ★ 读取 pthread Mutex 的 OnceBox 初始化状态
 	cbz	x0, LBB6_5
-	bl	__RNvMNtNtNtNtNtCs82bWklYMk3w_3std3sys3pal4unix4sync5mutexNtB2_5Mutex4lock
+	bl	__RNvMNtNtNtNtNtCs1SSuMAdGM58_3std3sys3pal4unix4sync5mutexNtB2_5Mutex4lock
 	...
 ```
 
@@ -219,7 +219,7 @@ _try_lock_mutex:
 	...
 	ldapr	x0, [x0]
 	cbz	x0, LBB7_10
-	bl	__RNvMNtNtNtNtNtCs82bWklYMk3w_3std3sys3pal4unix4sync5mutexNtB2_5Mutex8try_lock
+	bl	__RNvMNtNtNtNtNtCs1SSuMAdGM58_3std3sys3pal4unix4sync5mutexNtB2_5Mutex8try_lock
 	cbz	w0, LBB7_11        ; 失败直接返回，不进等待
 ```
 
@@ -402,10 +402,10 @@ pthread 的 `pthread_mutex_t` **需要运行时初始化**
 
 ```bash
 tools/evidence.sh ch13-arc-mutex
-scripts/verify-all.sh ch13
+scripts/verify-evidence.sh ch13
 
 # clone + 读 payload + drop 包装函数中的关键指令
-awk '/^__RNvCsrtIYgyWToU_3lib9clone_arc:/,/cfi_endproc/' .evidence/ch13-arc-mutex-lib.O3.s
+awk '/^__RNvCs8vZMNLDlXs5_3lib9clone_arc:/,/cfi_endproc/' .evidence/ch13-arc-mutex-lib.O3.s
 
 # 只挑关键指令
 grep -oE 'ldaddl?|dmb|brk' .evidence/ch13-arc-mutex-lib.O3.s | sort | uniq -c
@@ -425,7 +425,7 @@ grep -c 'unlock' .evidence/ch13-arc-mutex-lib.O3.s
 5. `grep -c unlock` 命中 3 次 —— `MutexGuard::drop` 会解锁。
 
 ```bash
-scripts/verify-all.sh ch13      # 5 条断言
+scripts/verify-evidence.sh ch13      # 5 条断言
 ```
 
 ## 13.6 与 unsafe 的关系
@@ -481,4 +481,4 @@ unsafe impl<T: ?Sized + Sync + Send, A: Allocator + Sync> Sync for Arc<T, A> {}
   原子计数 + Release/Acquire 配对 + `T: Send + Sync`，三条缺一不可。
 
 下一章转向**消息传递**：channel 的 `send` 为什么能让编译器
-"切断"本地对值的访问，以及 `mpsc` 在 1.98 里的内部实现变了什么。
+"切断"本地对值的访问，以及 `mpsc` 在 1.99 里的内部实现变了什么。

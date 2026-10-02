@@ -1,17 +1,17 @@
 # 第 17 章（实战）：构造一个并发任务池 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch17-project-threadpool
-scripts/verify-all.sh ch17       # 9 条断言（PASS=12）
+scripts/verify-evidence.sh ch17       # 9 条断言（PASS=12）
 ```
 
 ## 关键结论与断言（9 条，全绿）
 
-| # | 结论 | 断言（`scripts/verify-all.sh`） |
+| # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
 | 1 | 任务类型是 `Box<dyn FnOnce() + Send>` | MIR 里 `Sender::<Box<dyn FnOnce() + Send>>::send` |
 | 2 | ★ execute 里发生 unsize 强制转换 | MIR 里 `PointerCoercion(Unsize` |

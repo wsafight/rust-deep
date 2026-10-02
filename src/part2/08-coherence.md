@@ -448,7 +448,7 @@ done
 
 ```bash
 tools/evidence.sh ch08-coherence
-scripts/verify-all.sh ch08
+scripts/verify-evidence.sh ch08
 
 # 反例逐个跑
 for f in orphan conflicting_blanket uncovered_param orphan_vec overlapping_blanket; do
@@ -477,7 +477,7 @@ tools/objdump.sh ch08-coherence 3 | grep -E '^[0-9a-f]+ <'
 ```
 
 ```bash
-scripts/verify-all.sh ch08      # 11 条断言
+scripts/verify-evidence.sh ch08      # 11 条断言
 ```
 
 ## 8.6 与 unsafe 的关系

@@ -34,7 +34,7 @@ repos:
 
       - id: verify-evidence
         name: verify evidence chain
-        entry: scripts/verify-all.sh
+        entry: scripts/verify-evidence.sh
         language: system
         pass_filenames: false
         files: ^(Cargo\.toml|Cargo\.lock|examples/|scripts/|tools/|rust-toolchain\.toml$)

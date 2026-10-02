@@ -1,6 +1,6 @@
 # Rust 深水区
 
-> Rust 1.98 里那些真正卡人的地方：所有权、Trait、并发、异步与 unsafe
+> Rust 1.99 里那些真正卡人的地方：所有权、Trait、并发、异步与 unsafe
 
 ## 这是什么
 
@@ -17,11 +17,12 @@
 # 构建书
 mdbook serve --open
 
-# 一键验证全书证据（编译 + 生成证据 + 断言）
+# 一键验证（格式、Clippy、测试、文档和固定平台证据）
 scripts/verify-all.sh
 
-# 只验证某一章（编译、证据、断言都受此过滤）
-scripts/verify-all.sh ch07
+# 跨平台质量检查 / 只验证某一章的证据
+scripts/verify-portable.sh
+scripts/verify-evidence.sh ch07
 
 # Miri 验证（8 组检查，需要 nightly；与 stable 验证分开）
 scripts/verify-miri.sh
@@ -46,7 +47,7 @@ python3 -m pre_commit run --all-files
 | `tools/` | 生成 MIR / LLVM IR / 汇编 / 反汇编的脚本 |
 | `.evidence/` | 证据产物（gitignore，随时可重新生成） |
 | `.pre-commit-config.yaml` | 本地提交前检查（格式、Clippy、测试、doctest、证据链） |
-| `PLAN.md` | 写作阶段的设计与实测笔记，不属于正式书稿 |
+| `docs/design-notes-1.98.md` | Rust 1.98 写作阶段的归档设计记录 |
 
 ## 证据工具
 
@@ -57,7 +58,7 @@ tools/mir.sh      ch01-borrow        # MIR（stable，无需 nightly）
 tools/llvm.sh     ch07-vtable 3      # LLVM IR，opt-level=3
 tools/asm.sh      ch07-vtable 0      # 汇编，opt-level=0
 tools/objdump.sh  ch13-arc-mutex 3   # 反汇编
-tools/evidence.sh ch07-vtable        # 一次生成该章全部证据（s/ll/mir/o）
+tools/evidence.sh ch07-vtable        # 一次生成该章的 MIR / LLVM IR / 汇编
 
 # 跨架构对照（产物带 .x86_64 后缀，只出代码，不能运行）
 tools/evidence.sh ch16-atomics x86_64-apple-darwin
@@ -65,18 +66,20 @@ tools/evidence.sh ch16-atomics x86_64-apple-darwin
 
 ## 版本口径
 
-- 目标版本：**Rust 1.98.1**（2026-09-03 稳定版），Edition 2024
-- **本机工具链：`rustc 1.98.1` / `cargo 1.98.1` / LLVM 22.1.8**
-  → `.evidence/` 全部产物与各章"最后验证"标注均为 **1.98.1**。
+- 目标版本：**Rust 1.99.0**（stable），Edition 2024
+- **本机工具链：`rustc 1.99.0` / `cargo 1.99.0` / LLVM 23.1.1**
+  → `.evidence/` 全部产物与各章"最后验证"标注均为 **1.99.0**。
 - 主验证目标：`aarch64-apple-darwin`
 - 对照目标：`x86_64-apple-darwin`（可选；**只生成代码，不运行**）
-- Miri：可选 nightly 工具；安装方式见附录 A
+- Miri：固定 `nightly-2026-09-16`；安装方式见附录 A
 - 提交前检查：安装并运行 `.pre-commit-config.yaml` 中的本地 hooks（见附录 A）
 
 ## 当前状态
 
-- `scripts/verify-all.sh` 会验证本机可用的目标；未安装的可选跨架构目标会明确
-  标为 `SKIP`。`scripts/verify-miri.sh` 单独验证 Miri 正例和预期 UB 反例。
+- `scripts/verify-portable.sh` 是跨平台门禁；`scripts/verify-evidence.sh` 固定验证
+  Rust 1.99.0 / AArch64 macOS 证据。未安装的可选 x86_64 对照目标会标为 `SKIP`。
+- GitHub Actions 在 pull request 上运行跨平台检查、证据链和 Miri；三者通过后
+  `main` 分支才会部署到 Pages。
 - 已固化证据的 example（含断言）：
 
   | example | 内容 | 章 |

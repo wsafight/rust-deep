@@ -1,13 +1,13 @@
 # 第 13 章：Arc 与 Mutex 的指令级实现 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
-> 本机工具链：`rustc 1.98.1` / `cargo 1.98.1` / LLVM 22.1.8。
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
+> 本机工具链：`rustc 1.99.0` / `cargo 1.99.0` / LLVM 23.1.1。
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch13-arc-mutex
-scripts/verify-all.sh ch13
+scripts/verify-evidence.sh ch13
 ```
 
 ## 关键结论与断言（3 条，全绿）

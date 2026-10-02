@@ -1,8 +1,8 @@
 //! 别名规则：**合法**用例 —— Miri 必须通过（不误报）。
 //!
 //! 复现：
-//!   cargo +nightly miri test -p ch25-aliasing --test aliasing      # 必须通过
-//!   cargo +nightly miri test -p ch25-aliasing --test aliasing_ub   # 必须失败
+//!   cargo +nightly-2026-09-16 miri test -p ch25-aliasing --test aliasing      # 必须通过
+//!   cargo +nightly-2026-09-16 miri test -p ch25-aliasing --test aliasing_ub   # 必须失败
 //!
 //! 与 `sb_legal.rs` 的分工：
 //! - `sb_legal.rs` 演示的是**手工裸指针**下的合法边界；

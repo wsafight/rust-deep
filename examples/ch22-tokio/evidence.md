@@ -1,6 +1,6 @@
 # 第 22 章：tokio 实战 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 > tokio **1.53.1**
 
 ## 复现命令
@@ -11,7 +11,7 @@ cargo run -p ch22-tokio            # 预期输出：total = 4
 
 # ★ 证据（本章是全书唯一依赖第三方 crate 的 example）
 tools/evidence.sh ch22-tokio
-scripts/verify-all.sh ch22         # 7 条断言
+scripts/verify-evidence.sh ch22         # 7 条断言
 ```
 
 ### ⚠️ 本章的 example 依赖 tokio —— 工具链为此加了一个机制
@@ -20,11 +20,11 @@ scripts/verify-all.sh ch22         # 7 条断言
 ch22 需要真的链接 tokio，于是：
 
 1. `examples/ch22-tokio/externs` 里逐行写需要哪些 crate（这里是 `tokio`）；
-2. `tools/lib.sh` 的 `rd_extern_args` 用
+2. `tools/lib.sh` 的 `rd_prepare_rustc_args` 用
    `cargo build --message-format=json` 找出 `.rlib` 路径，
    拼出 `--extern=tokio=...` **以及 `-L dependency=<deps 目录>`**；
 3. `tools/{mir,llvm,asm,objdump}.sh` 都调用它；
-4. `scripts/verify-all.sh` 的 `assert_fails` 同样带上。
+4. `scripts/verify-evidence.sh` 的 `assert_fails` 同样带上。
 
 ★ **`-L dependency=` 是必需的**：只给 `--extern=tokio=...` 不够 ——
 rustc 会从 tokio 的 metadata 里读到它依赖 `pin_project_lite` 等 crate，
@@ -286,9 +286,9 @@ cargo expand -p ch22-tokio | head -40
 
 ## 待办
 
-- [x] 7 条断言全绿（`verify-all.sh ch22`）
+- [x] 7 条断言全绿（`verify-evidence.sh ch22`）
 - [x] 运行期演示 `total = 4`
-- [x] `tools/lib.sh` 增加 `rd_extern_args`（第三方依赖的 `--extern` + `-L`）
+- [x] `tools/lib.sh` 增加 `rd_prepare_rustc_args`（第三方依赖的 `--extern` + `-L`）
 - [x] 3 个反例落库并加断言
 - [ ] 若将来接 criterion，可以对 `spawn_blocking` vs 直接阻塞做真实测量
 - [ ] 第 23 章（实战：mini async runtime）会把本章的结论收进一个可运行的项目

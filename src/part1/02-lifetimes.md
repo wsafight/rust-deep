@@ -340,7 +340,7 @@ done
 3. 三个反例分别报 E0106 / `lifetime may not live long enough` ×2。
 
 ```bash
-scripts/verify-all.sh ch02      # 7 条断言
+scripts/verify-evidence.sh ch02      # 7 条断言
 ```
 
 ## 2.7 与 unsafe 的关系

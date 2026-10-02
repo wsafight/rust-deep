@@ -1,6 +1,6 @@
 [book]
 title = "Rust 深水区"
-description = "Rust 1.98 里那些真正卡人的地方：所有权、Trait、并发、异步与 unsafe"
+description = "Rust 1.99 里那些真正卡人的地方：所有权、Trait、并发、异步与 unsafe"
 authors = ["jump-and-jump"]
 language = "zh-CN"
 src = "src"
@@ -13,8 +13,8 @@ create-missing = true
 default-theme = "navy"
 preferred-dark-theme = "ayu"
 no-section-label = false
-git-repository-url = ""
-edit-url-template = ""
+git-repository-url = "https://github.com/wsafight/rust-deep"
+edit-url-template = "https://github.com/wsafight/rust-deep/edit/main/{path}"
 mathjax-support = false
 
 [output.html.code]

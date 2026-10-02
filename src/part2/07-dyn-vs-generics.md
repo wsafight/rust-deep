@@ -89,7 +89,7 @@ note: ...because method `clone_me` references the `Self` type in its return type
 l_anon.9cb3917e37f35be02d8e38bfb2db0eeb.0:
 	.asciz	"\000\000\000\000\000\000\000\000\b\000\000\000\000\000\000\000\b\000\000\000\000\000\000"
 	.quad	_call_generic                                          ; ← 偏移 24：area
-	.quad	__RNvXCsrtIYgyWToU_3libNtB2_2SqNtB2_5Shape4name        ; ← 偏移 32：name
+	.quad	__RNvXCs8vZMNLDlXs5_3libNtB2_2SqNtB2_5Shape4name        ; ← 偏移 32：name
 ```
 
 逐字节读：
@@ -296,7 +296,7 @@ fn takes_box(x: Box<dyn Shape>);     // ✅
 实测：
 
 ```llvm
-@area_dyn = unnamed_addr alias double (ptr, ptr), ptr @_RNvCsrtIYgyWToU_3lib8dyn_area
+@area_dyn = unnamed_addr alias double (ptr, ptr), ptr @_RNvCs8vZMNLDlXs5_3lib8dyn_area
 ```
 
 两个函数体完全相同，LLVM 把它们合并了。
@@ -307,7 +307,7 @@ fn takes_box(x: Box<dyn Shape>);     // ✅
 
 ```bash
 tools/evidence.sh ch07-vtable
-scripts/verify-all.sh ch07
+scripts/verify-evidence.sh ch07
 
 # 看 vtable 的完整布局
 sed -n '/__DATA,__const/,/literal8/p' .evidence/ch07-vtable-lib.O3.s
@@ -335,7 +335,7 @@ rustc --edition 2024 --crate-type=lib \
    `needs to allow building a vtable`。
 
 ```bash
-scripts/verify-all.sh ch07      # 13 条断言
+scripts/verify-evidence.sh ch07      # 13 条断言
 ```
 
 ## 7.6 与 unsafe 的关系

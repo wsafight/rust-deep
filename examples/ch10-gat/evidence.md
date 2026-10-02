@@ -1,18 +1,18 @@
 # 第 10 章：GAT（泛型关联类型）— 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
-> 本机工具链：`rustc 1.98.1` / `cargo 1.98.1` / LLVM 22.1.8。
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
+> 本机工具链：`rustc 1.99.0` / `cargo 1.99.0` / LLVM 23.1.1。
 
 ## 复现命令
 
 ```bash
-tools/evidence.sh ch10-gat       # 生成 .s / .ll / .mir / .o
-scripts/verify-all.sh ch10       # 9 条断言（PASS=11）
+tools/evidence.sh ch10-gat       # 生成 .s / .ll / .mir
+scripts/verify-evidence.sh ch10       # 9 条断言（PASS=11）
 ```
 
 ## 关键结论与断言（9 条，全绿）
 
-| # | 结论 | 断言（`scripts/verify-all.sh`） |
+| # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
 | 1 | GAT 让"借自 `self`"的迭代器可以编译 | MIR 里 `<Chunks as LendingIter>::next` |
 | 2 | 借自外部 `'s` 的版本同样单态化 | MIR 里 `<Windows<'_> as LendingIter>::next` |
@@ -98,7 +98,7 @@ error: missing required bound on `Item`
 
 ★ 编译器**直接给出修复建议**，而且 note 里带着 issue 链接
 （#87479）—— 说明这是"临时强制、等待未来放宽"的状态。
-**在 1.98.1 上它仍然是强制的。**
+**在 1.99.0 上它仍然是强制的。**
 
 ## 本章这种 GAT 接口的限制：不能直接 dyn
 

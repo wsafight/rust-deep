@@ -128,7 +128,7 @@ impl SelfRef {
 }
 ```
 
-O3 的汇编（`aarch64-apple-darwin` / `rustc 1.98.1` / `-O` / `#[unsafe(no_mangle)]`）：
+O3 的汇编（`aarch64-apple-darwin` / `rustc 1.99.0` / `-O` / `#[unsafe(no_mangle)]`）：
 
 ```asm
 _make_self_ref:
@@ -166,7 +166,7 @@ _make_self_ref:
 O3 把两条 `str` 合并成了一条 `stp` —— 这就是"自引用"和"两个普通字段"
 在机器码层面**没有区别**的原因：它只是两个数字，其中一个恰好是个地址。
 
-> ⚠️ 符号名里的 hash（如 `CsrtIYgyWToU`）**每次编译都会变**，
+> ⚠️ 符号名里的 hash（如 `Cs8vZMNLDlXs5`）**每次编译都会变**，
 > 引用汇编时不要把它当常量。
 
 读回来也一样朴素：
@@ -366,7 +366,7 @@ error[E0277]: `{async fn body of zero_await()}` cannot be unpinned
 **一个不可能自引用的状态机，也被判定为 `!Unpin`。**
 
 这是当前编译器对匿名 async 状态机采取的保守语义：
-1.98.1 上，编译器生成的 `async` 产物不会自动实现 `Unpin`，
+1.99.0 上，编译器生成的 `async` 产物不会自动实现 `Unpin`，
 即使具体函数没有形成自引用。不要把这个观察解释成借用检查与 auto trait
 推导之间必然存在某种"时序死结"；对读者可靠的结论是 API 行为本身。
 
@@ -456,7 +456,7 @@ pub struct NotUnpin { pub a: u64, _p: PhantomPinned }
 
 ```bash
 tools/evidence.sh ch19-pin
-scripts/verify-all.sh ch19      # 13 条断言
+scripts/verify-evidence.sh ch19      # 13 条断言
 
 # ★ 反例：三条"必须编译不过"
 rustc --edition 2024 --crate-type=lib examples/ch19-pin/fail/pin_requires_unpin.rs
@@ -524,8 +524,8 @@ this.self_ref = std::ptr::addr_of_mut!(this.data);
 Miri 可以在执行具体测试路径时检查这类别名错误。
 
 ```bash
-cargo +nightly miri test -p ch19-pin --test selfref      # 必须通过
-cargo +nightly miri test -p ch19-pin --test selfref_ub   # 必须失败
+cargo +nightly-2026-09-16 miri test -p ch19-pin --test selfref      # 必须通过
+cargo +nightly-2026-09-16 miri test -p ch19-pin --test selfref_ub   # 必须失败
 ```
 
 > **这是本书里"`unsafe` 的代价"最具体的一次呈现**：

@@ -1,11 +1,11 @@
 //! 自引用结构：**合法版本**。
 //!
-//! 普通 `cargo test` 与 `cargo +nightly miri test` 都必须通过。普通测试用于
+//! 普通 `cargo test` 与 `cargo +nightly-2026-09-16 miri test` 都必须通过。普通测试用于
 //! 回归功能与地址稳定性；Miri 额外检查当前模型能够发现的 UB。
 //!
 //! 复现：
-//!   cargo +nightly miri test -p ch19-pin --test selfref      # 必须通过
-//!   cargo +nightly miri test -p ch19-pin --test selfref_ub   # 必须失败
+//!   cargo +nightly-2026-09-16 miri test -p ch19-pin --test selfref      # 必须通过
+//!   cargo +nightly-2026-09-16 miri test -p ch19-pin --test selfref_ub   # 必须失败
 
 use ch19_pin::{SelfRef, make_self_ref, read_self_ref};
 

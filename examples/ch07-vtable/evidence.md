@@ -1,19 +1,19 @@
 # 第 7 章：dyn vs 泛型 —— vtable 布局与间接调用 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
-> 本机工具链：`rustc 1.98.1` / `cargo 1.98.1` / LLVM 22.1.8。
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
+> 本机工具链：`rustc 1.99.0` / `cargo 1.99.0` / LLVM 23.1.1。
 
 ## 复现命令
 
 ```bash
-tools/evidence.sh ch07-vtable        # 生成 .s / .ll / .mir / .o
-scripts/verify-all.sh ch07           # 跑本章 6 条断言
+tools/evidence.sh ch07-vtable        # 生成 .s / .ll / .mir
+scripts/verify-evidence.sh ch07           # 跑本章 6 条断言
 tools/objdump.sh ch07-vtable 3       # 需要反汇编时
 ```
 
 ## 关键结论与断言（6 条，全绿）
 
-| # | 结论 | 断言（`scripts/verify-all.sh`） |
+| # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
 | 1 | 第一个方法在 vtable 偏移 **24** | `ldr x?, [x?, #24]` |
 | 2 | 第二个方法在偏移 **32**（按声明顺序） | `ldr x?, [x?, #32]` |
@@ -27,7 +27,7 @@ tools/objdump.sh ch07-vtable 3       # 需要反汇编时
 ### 1) 间接调用：偏移 24 + 尾跳转
 
 ```asm
-__RNvCsrtIYgyWToU_3lib8dyn_area:
+__RNvCs8vZMNLDlXs5_3lib8dyn_area:
 	ldr	x1, [x1, #24]     ; vtable 第 4 个 slot（前 3 个是 drop/size/align）
 	br	x1                ; 尾调用：不是 bl，因为没有后续工作
 ```
@@ -48,8 +48,8 @@ __RNvCsrtIYgyWToU_3lib8dyn_area:
 	.p2align	3, 0x0
 l_anon.684219fb9108ceced0d7d3641a5368d1.0:
 	.asciz	"\000\000\000\000\000\000\000\000\b\000\000\000\000\000\000\000\b\000\000\000\000\000\000"
-	.quad	__RNvXCsrtIYgyWToU_3libNtB2_2SqNtB2_5Shape4area
-	.quad	__RNvXCsrtIYgyWToU_3libNtB2_2SqNtB2_5Shape4name
+	.quad	__RNvXCs8vZMNLDlXs5_3libNtB2_2SqNtB2_5Shape4area
+	.quad	__RNvXCs8vZMNLDlXs5_3libNtB2_2SqNtB2_5Shape4name
 ```
 
 **逐字节读法**：
@@ -60,8 +60,8 @@ l_anon.684219fb9108ceced0d7d3641a5368d1.0:
 ### 4) 静态 vtable 与字符串字面量
 
 ```asm
-	.globl	__RNvCsrtIYgyWToU_3lib9STATIC_VT
-__RNvCsrtIYgyWToU_3lib9STATIC_VT:
+	.globl	__RNvCs8vZMNLDlXs5_3lib9STATIC_VT
+__RNvCs8vZMNLDlXs5_3lib9STATIC_VT:
 	.quad	l_anon.684219fb9108ceced0d7d3641a5368d1.1   ; 数据指针（指向 Sq(2.0)）
 	.quad	l_anon.684219fb9108ceced0d7d3641a5368d1.0   ; vtable 指针
 ```
@@ -105,7 +105,7 @@ _area_boxed:
 `warning: functions generic over types or consts must be mangled`。
 **这个 warning 本身就是"泛型 = 单态化"的证据。**
 
-★ 实测还发现：`_area_dyn = __RNvCsrtIYgyWToU_3lib8dyn_area`
+★ 实测还发现：`_area_dyn = __RNvCs8vZMNLDlXs5_3lib8dyn_area`
 —— `area_dyn` 和 `dyn_area` 函数体相同，被 LLVM 折叠成了同一个函数。
 
 ## 前置条件（容易踩的坑）

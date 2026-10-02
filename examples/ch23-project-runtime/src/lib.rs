@@ -50,12 +50,14 @@ use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 /// ★ `dyn Future<Output = ()> + Send` 里的 **`+ Send`** 是第 22 章那个约束：
 ///   任务会被从**任意线程**（waker 可能在别的线程被调用）放回队列，
 ///   而队列是 `Mutex<VecDeque<Arc<Task>>>` —— 所以 `Task` 必须 `Send`。
+// ANCHOR: task
 pub struct Task {
     /// `Option` 是为了在完成时把 future 丢掉（释放它占的内存）
     future: Mutex<Option<Pin<Box<dyn Future<Output = ()> + Send>>>>,
     /// 回到队列的通道。用 `Weak` 避免 `Executor -> Task -> Executor` 的引用环。
     executor: Weak<Executor>,
 }
+// ANCHOR_END: task
 
 impl Task {
     /// 推进一步。返回 `true` 表示还没完成。
@@ -104,6 +106,7 @@ impl Task {
 /// ★ 这就是第 24 章那句话的最纯粹形态：
 ///   **"`unsafe` 的义务是维持契约的前提"** ——
 ///   而这里的契约是关于**引用计数配平**的，编译器和 MIR 都看不见。
+// ANCHOR: task_waker
 fn task_waker(task: &Arc<Task>) -> Waker {
     /// 从 `RawWaker` 的 `data` 里拿回 `Arc<Task>`（**不消耗**引用计数）。
     ///
@@ -151,10 +154,12 @@ fn task_waker(task: &Arc<Task>) -> Waker {
     // 这是本章刻意下潜的一处 unsafe，也是"安全抽象 + 不安全实现"的样板。
     unsafe { Waker::from_raw(RawWaker::new(raw, &VTABLE)) }
 }
+// ANCHOR_END: task_waker
 
 /// waker 被调用时做的事：**把任务放回队列**。
 ///
 /// ★ 这一行就是"唤醒"的全部含义 —— 没有魔法，就是入队。
+// ANCHOR: wake_task
 fn wake_task(task: Arc<Task>) {
     if let Some(exec) = task.executor.upgrade() {
         exec.ready.lock().unwrap().push_back(task);
@@ -162,6 +167,7 @@ fn wake_task(task: Arc<Task>) {
     // 如果 executor 已经没了（upgrade 失败），什么都不做 ——
     // 任务会被安静地丢掉。
 }
+// ANCHOR_END: wake_task
 
 // ============================================================
 // 2) executor：一个队列 + 一个循环
@@ -203,6 +209,7 @@ impl Executor {
     /// 运行当前就绪队列，直到队列暂时为空。
     ///
     /// 它不会等待未来的跨线程唤醒，因此不保证返回时所有任务都已完成。
+    // ANCHOR: executor_run
     pub fn run(&self) {
         loop {
             // ① 取一个就绪任务（没有就退出）
@@ -215,6 +222,7 @@ impl Executor {
             let _pending = task.poll();
         }
     }
+    // ANCHOR_END: executor_run
 }
 
 impl Default for Executor {
@@ -235,7 +243,7 @@ impl Default for Executor {
 /// 因为它不跨线程（对比 `Executor::spawn`）。
 pub fn block_on<F: Future>(f: F) -> F::Output {
     let mut f = Box::pin(f);
-    // `Waker::noop()` 是 1.98 标准库提供的（第 18 章）
+    // `Waker::noop()` 是 1.99 标准库提供的（第 18 章）
     let waker = Waker::noop();
     let mut cx = Context::from_waker(waker);
     loop {

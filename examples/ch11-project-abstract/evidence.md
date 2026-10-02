@@ -1,17 +1,17 @@
 # 第 11 章（实战）：设计一个小型 trait 抽象层 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch11-project-abstract
-scripts/verify-all.sh ch11       # 10 条断言（PASS=12）
+scripts/verify-evidence.sh ch11       # 10 条断言（PASS=12）
 ```
 
 ## 关键结论与断言（10 条，全绿）
 
-| # | 结论 | 断言（`scripts/verify-all.sh`） |
+| # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
 | 1 | 关联类型版本：`Sum` 单态化 | MIR 里 `<Sum as Projection>::project` |
 | 2 | 同一个 trait 的另一个实现 | MIR 里 `<Count as Projection>::project` |
@@ -31,7 +31,7 @@ scripts/verify-all.sh ch11       # 10 条断言（PASS=12）
 `sum_dyn`（参数是 `&dyn Projection`，符号被导出）的完整函数体：
 
 ```asm
-__RNvCsrtIYgyWToU_3lib7sum_dyn:
+__RNvCs8vZMNLDlXs5_3lib7sum_dyn:
 	mov	x8, x1
 	mov	x1, x0
 	ldr	x3, [x3, #24]     ; ← vtable 偏移 24（与第 7 章完全一致）
@@ -62,7 +62,7 @@ LLVM **完全去虚化**了：它知道 `p` 就是 `&Sum`，
 
 ★ 这条断言必须限定在**函数体内**，不能用全文件 grep：
 `.O3.s` 里有几百个符号，`br x?` 到处都是。
-为此给 `verify-all.sh` 加了新的断言类型 **`assert_fn_contains` / `assert_fn_not_contains`**
+为此给 `verify-evidence.sh` 加了新的断言类型 **`assert_fn_contains` / `assert_fn_not_contains`**
 （awk 取 `^符号:` 到 `cfi_endproc` 之间的函数体）。
 这是第四种断言类型。
 
@@ -180,7 +180,7 @@ blanket impl 已经把那个类型覆盖了。
 
 ```bash
 # dyn 的真实代价（函数体内）
-awk '/^__RNvCsrtIYgyWToU_3lib7sum_dyn:/,/cfi_endproc/' .evidence/ch11-project-abstract-lib.O3.s
+awk '/^__RNvCs.*_3lib7sum_dyn:/,/cfi_endproc/' .evidence/ch11-project-abstract-lib.O3.s
 
 # 去虚化（0 次间接跳转）
 awk '/^_use_dyn:/,/cfi_endproc/' .evidence/ch11-project-abstract-lib.O3.s | grep -cE 'br\s+x[0-9]+|blr'

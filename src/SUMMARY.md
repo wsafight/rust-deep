@@ -57,6 +57,6 @@
 
 # 附录
 
-- [A. 环境与版本（Rust 1.98.1 / edition 2024）](./appendix/a-setup.md)
+- [A. 环境与版本（Rust 1.99.0 / edition 2024）](./appendix/a-setup.md)
 - [B. 常见编译错误逐条解读](./appendix/b-errors.md)
 - [C. 延伸阅读](./appendix/c-reading.md)

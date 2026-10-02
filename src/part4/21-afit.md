@@ -3,7 +3,7 @@
 > 一句话：**`async fn` 在 trait 里隐藏了返回类型** ——
 > 这既是它能用起来的原因，也是公共 API 难以补充返回 future 的 `Send` bound、
 > 且当前不能直接 `dyn` 的原因。
-> 对本章比较的几种常见接口，在 Rust 1.98 上，`dyn`、`Send`、零分配三项
+> 对本章比较的几种常见接口，在 Rust 1.99 上，`dyn`、`Send`、零分配三项
 > 往往需要取舍。
 
 ## 先把语法认清
@@ -49,7 +49,7 @@ pub trait Store {
 }
 ```
 
-**这段编译过了**（1.98 上 `async fn in trait` 已稳定）。但编译器给了个警告：
+**这段编译过了**（1.99 上 `async fn in trait` 已稳定）。但编译器给了个警告：
 
 ```text
 warning: use of `async fn` in public traits is discouraged as auto trait
@@ -236,7 +236,7 @@ pub fn spawn_ok(s: &Mem) {
 | RPITIT `-> impl Future + Send` | ❌ | ✅ | 无 |
 | `-> Box<dyn Future + Send>` | ✅ | ✅ | **一次堆分配** |
 
-★ **没有一列全是 ✅ 的行。** 这就是 1.98 上 AFIT 的现状。
+★ **没有一列全是 ✅ 的行。** 这就是 1.99 上 AFIT 的现状。
 
 ## 21.3 为什么必须这样设计
 
@@ -349,7 +349,7 @@ _use_store_mem:
 
 ### 反直觉之四：当前 AFIT 不能直接进入 trait object
 
-在 Rust 1.98 的 dyn compatibility 规则下，含 AFIT 的 trait 会被拒绝。
+在 Rust 1.99 的 dyn compatibility 规则下，含 AFIT 的 trait 会被拒绝。
 
 vtable 是一张**固定布局**的函数指针表（第 7 章：
 前 3 个 slot 是 `drop` / `size` / `align`，方法从偏移 24 起）。
@@ -357,7 +357,7 @@ vtable 是一张**固定布局**的函数指针表（第 7 章：
 
 常见兼容方案是在 API 层显式返回 `Pin<Box<dyn Future<...>>>`，把具体 future
 擦除并间接存放。语言和编译器未来也可能提供其他方案，因此这里应记住的是
-Rust 1.98 的限制与当前工程取舍，而不是把它当作永远无法改变的定律。
+Rust 1.99 的限制与当前工程取舍，而不是把它当作永远无法改变的定律。
 
 ### 反直觉之五：`Box<dyn Future>` 不能直接 `.await`
 
@@ -378,7 +378,7 @@ Rust 1.98 的限制与当前工程取舍，而不是把它当作永远无法改�
 
 ```bash
 tools/evidence.sh ch21-afit
-scripts/verify-all.sh ch21      # 8 条断言
+scripts/verify-evidence.sh ch21      # 8 条断言
 
 # ★ 泛型路径是单态化 + 零分配
 grep -n 'field _s0: {async fn body of use_store<Mem>()}' .evidence/ch21-afit-lib.mir

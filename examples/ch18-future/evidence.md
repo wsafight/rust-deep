@@ -1,12 +1,12 @@
 # 第 18 章：`Future` 是惰性的 — 实测证据
 
-> 最后验证：**rustc 1.98.1**（2026-09-01）/ LLVM 22.1.8 / `aarch64-apple-darwin`
+> 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
 ## 复现命令
 
 ```bash
 tools/evidence.sh ch18-future
-scripts/verify-all.sh ch18       # 11 条断言（PASS=13）
+scripts/verify-evidence.sh ch18       # 11 条断言（PASS=13）
 
 # ★ 惰性的运行期证据（独立可执行文件）
 rustc --edition 2024 examples/ch18-future/lazy_demo.rs -o /tmp/anp && /tmp/anp
@@ -14,7 +14,7 @@ rustc --edition 2024 examples/ch18-future/lazy_demo.rs -o /tmp/anp && /tmp/anp
 
 ## 关键结论与断言（11 条，全绿）
 
-| # | 结论 | 断言（`scripts/verify-all.sh`） |
+| # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
 | 1 | `async fn` 的返回类型是状态机 | MIR 里 `fn lazy(_1: u64) -> {async fn body of lazy()}` |
 | 2 | ★ 函数体被编译成 coroutine | MIR 里 `coroutine@examples/ch18-future/src/lib.rs` |
@@ -175,7 +175,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 ★ 手写 `noop_waker` 的那几行 `unsafe` 是一个微缩的
 "安全抽象 + 不安全实现"样本：`Waker` 的接口完全安全，
 但构造它要**承诺**四个函数符合 `RawWakerVTable` 的契约。
-（1.98 上标准库提供了 `Waker::noop()`，`lazy_demo.rs` 用的就是它。）
+（1.99 上标准库提供了 `Waker::noop()`，`lazy_demo.rs` 用的就是它。）
 
 ## 交叉验证（可选）
 

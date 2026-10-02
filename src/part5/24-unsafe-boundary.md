@@ -67,7 +67,7 @@ pub unsafe fn raw_double_add(a: *mut i32, b: *const i32) {
 **逻辑一字不差。** 你的直觉是："裸指针没有借用检查、没有安全检查，
 应该至少一样快，说不定更快。"
 
-实测（`aarch64-apple-darwin` / `rustc 1.98.1` / `-O` / `#[unsafe(no_mangle)]`）：
+实测（`aarch64-apple-darwin` / `rustc 1.99.0` / `-O` / `#[unsafe(no_mangle)]`）：
 
 ```asm
 _safe_double_add:                 ; 安全引用版本
@@ -414,7 +414,7 @@ pub unsafe fn raw_double_add(a: *mut i32, b: *const i32)
 
 ```bash
 tools/evidence.sh ch24-noalias
-scripts/verify-all.sh ch24      # 9 条断言
+scripts/verify-evidence.sh ch24      # 9 条断言
 
 # ★ &mut 只读时与 & 的签名完全一致
 grep -o 'define.*@sum_mut_ro(ptr [^,]*' .evidence/ch24-noalias-lib.O3.ll

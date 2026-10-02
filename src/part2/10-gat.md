@@ -201,7 +201,7 @@ error: missing required bound on `Item`
 ```
 
 ★ 编译器**直接给出修复建议**，note 里还带着 issue 链接（#87479）——
-说明这是"**临时强制、等待未来放宽**"的状态。在 1.98.1 上它仍然强制。
+说明这是"**临时强制、等待未来放宽**"的状态。在 1.99.0 上它仍然强制。
 
 语义上的理由：`Self::Item<'a>` 只有在 `Self: 'a` 时才有定义。
 否则"`Self` 里可能含有比 `'a` 更短命的东西"，而 `Item<'a>` 又依赖 `Self`，
@@ -399,7 +399,7 @@ GAT 的参数在**单态化时**就被代入了，运行期没有任何"类型�
 
 ```bash
 tools/evidence.sh ch10-gat
-scripts/verify-all.sh ch10
+scripts/verify-evidence.sh ch10
 
 # GAT 的实例化
 grep -nE 'LendingIter|Family' .evidence/ch10-gat-lib.mir
@@ -423,7 +423,7 @@ diff <(awk '/^_sum_windows:/,/cfi_endproc/'        .evidence/ch10-gat-lib.O3.s) 
    `add.2d` 条数相同。
 
 ```bash
-scripts/verify-all.sh ch10      # 9 条断言
+scripts/verify-evidence.sh ch10      # 9 条断言
 ```
 
 ## 10.6 与 unsafe 的关系

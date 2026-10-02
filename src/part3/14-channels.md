@@ -197,16 +197,16 @@ grep -oE 'mpmc[a-zA-Z0-9_]*|sync4mpsc' .evidence/ch14-channels-lib.O3.s | sort |
 ```text
     192 sync4mpmc
      27 sync4mpsc
-     17 mpmc4zero5InnerEECsrtIYgyWToU_3lib
-     16 mpmc5waker5WakerEECsrtIYgyWToU_3lib
+     17 mpmc4zero5InnerEECs8vZMNLDlXs5_3lib
+     16 mpmc5waker5WakerEECs8vZMNLDlXs5_3lib
 ```
 
 具体的符号：
 
 ```text
-__RNvMNtNtNtCs82bWklYMk3w_3std4sync4mpmc7contextNtB2_7Context3new
-__RNvMsn_NtCshxvaOLs88l5_5alloc4syncINtB5_3ArcNtNtNtNtCs82bWklYMk3w_3std4sync4mpmc7context5InnerE9drop_slow...
-__RNvMs0_NtNtNtCs82bWklYMk3w_3std4sync4mpmc5wakerNtB5_9SyncWaker10disconnect
+__RNvMNtNtNtCs1SSuMAdGM58_3std4sync4mpmc7contextNtB2_7Context3new
+__RNvMsn_NtCs6zY7rJBZy9D_5alloc4syncINtB5_3ArcNtNtNtNtCs1SSuMAdGM58_3std4sync4mpmc7context5InnerE9drop_slow...
+__RNvMs0_NtNtNtCs1SSuMAdGM58_3std4sync4mpmc5wakerNtB5_9SyncWaker10disconnect
 ```
 
 ★ **`sync4mpmc` 出现 192 次，`sync4mpsc` 只有 27 次。**
@@ -215,7 +215,7 @@ __RNvMs0_NtNtNtCs82bWklYMk3w_3std4sync4mpmc5wakerNtB5_9SyncWaker10disconnect
 
 > **这对写作的影响**：很多关于 `mpsc` 的旧资料（包括一些书和博客）
 > 会讲"`mpsc` 内部是一个基于 `Mutex` 的链表队列"。
-> **在 1.98 上已经不是这样了。**
+> **在 1.99 上已经不是这样了。**
 >
 > 写这一章时**不要**按旧实现描述内部结构，
 > 要么按 `mpmc` 写，要么只说"具体实现是标准库内部细节"。
@@ -360,7 +360,7 @@ drop(_4) -> [return: bb14, unwind terminate(cleanup)];   // ← 失败路径上�
 
 **这意味着很多关于 `mpsc` 的旧资料是过期的。**
 具体来说，常见的"`mpsc` 内部是一个基于 `Mutex` 的链表"这种描述
-在 1.98 上已经不对了。
+在 1.99 上已经不对了。
 
 > **方法论的收获**：这条结论不是从文档里读来的，
 > 是**数符号名数出来的**。
@@ -372,7 +372,7 @@ drop(_4) -> [return: bb14, unwind terminate(cleanup)];   // ← 失败路径上�
 
 ```bash
 tools/evidence.sh ch14-channels
-scripts/verify-all.sh ch14
+scripts/verify-evidence.sh ch14
 
 # ★ "发送即 move"的字面证据
 grep -n '_10 = move _4' .evidence/ch14-channels-lib.mir
@@ -395,7 +395,7 @@ grep -oE 'sync4mpmc|sync4mpsc' .evidence/ch14-channels-lib.O3.s | sort | uniq -c
    —— `mpsc` 内部已经是 `mpmc`。
 
 ```bash
-scripts/verify-all.sh ch14      # 4 条断言
+scripts/verify-evidence.sh ch14      # 4 条断言
 ```
 
 ## 14.6 与 unsafe 的关系
