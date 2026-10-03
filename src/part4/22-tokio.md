@@ -538,7 +538,7 @@ cargo expand -p ch22-tokio | head -40
    `future cannot be sent between threads safely`（×2）、
    **E0373** `async block may outlive the current function`。
 
-★ **注意反例的编译命令**：ch22 是全书唯一依赖第三方 crate 的 example。
+★ **注意反例的编译命令**：ch22 依赖第三方 crate（第 28 章也使用 tokio）。
 `tools/lib.sh` 里的 `rd_prepare_rustc_args` 会从 `examples/ch22-tokio/externs`
 读出需要哪些 crate，再用 `cargo build --message-format=json` 找出
 `.rlib` 路径，拼出 `--extern` 和 `-L dependency=` 参数。

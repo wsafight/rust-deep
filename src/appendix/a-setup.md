@@ -12,7 +12,7 @@
 | 主验证目标 | `aarch64-apple-darwin` |
 | 对照目标 | `x86_64-apple-darwin`（**只能看代码，不能运行**） |
 | Miri | `miri 0.1.0 (215a8af4bb 2026-09-15)`（`rustc 1.100.0-nightly`） |
-| tokio（仅第 22 章） | `1.53.1`（唯一的第三方依赖） |
+| tokio（第 22、28 章） | `1.53.1`（唯一使用的第三方 crate） |
 
 核对本机版本：
 
@@ -99,7 +99,7 @@ scripts/verify-all.sh
 scripts/verify-portable.sh
 scripts/verify-evidence.sh ch07
 
-# Miri 验证（8 组检查，需要 nightly；与上面分开）
+# Miri 验证（9 个测试目标 + 前置检查，需要 nightly；与上面分开）
 scripts/verify-miri.sh
 ```
 
@@ -170,18 +170,18 @@ cargo expand -p ch22-tokio --bin ch22-tokio
 | `examples/` | 每章一个独立 crate，承载书中所有可运行示例 |
 | `examples/*/src/lib.rs` | 该章的正例（可编译） |
 | `examples/*/fail/*.rs` | 该章的**反例**（故意编译不过，不参与构建） |
-| `examples/*/tests/*.rs` | Miri 用例（UB 用例用 `#![cfg(miri)]` 包住） |
+| `examples/*/tests/*.rs` | 集成测试与 Miri 用例（UB 用例用 `#![cfg(miri)]` 包住） |
 | `examples/*/cross-targets` | 该 example 需要哪些额外 target 的对照证据 |
 | `examples/*/evidence.md` | 该章的实测记录（命令 + 真实输出 + 断言清单） |
-| `examples/*/externs` | 该 example 需要哪些第三方 crate（只有 `ch22-tokio` 有） |
+| `examples/*/externs` | 该 example 需要哪些第三方 crate（第 22、28 章使用） |
 | `tools/` | 生成 MIR / LLVM IR / 汇编 / 反汇编的脚本 |
 | `.evidence/` | 证据产物（gitignore，随时可重新生成） |
 
-### ⚠️ 唯一依赖第三方 crate 的一章
+### ⚠️ 依赖第三方 crate 的章节
 
-第 22 章（tokio）需要真的链接 tokio。机制是：
+第 22、28 章需要真的链接 tokio。机制是：
 
-1. `examples/ch22-tokio/externs` 里逐行写需要哪些 crate；
+1. 对应 example 的 `externs` 里逐行写需要哪些 crate；
 2. `tools/lib.sh` 的 `rd_prepare_rustc_args` 用 `cargo build --message-format=json`
    找出 `.rlib` 路径，拼出 `--extern=tokio=...` **以及 `-L dependency=<deps 目录>`**；
 3. `tools/*.sh` 和 `scripts/verify-evidence.sh` 都调用它。

@@ -55,8 +55,18 @@
 
 ---
 
+# 第六部分：资源、内存表示与系统边界
+
+- [27. Drop、drop flags 与 panic safety](./part6/27-drop-panic-safety.md)
+- [28. Future 被丢弃时发生什么：取消安全](./part6/28-cancellation-safety.md)
+- [29. 内存布局、有效值与 MaybeUninit](./part6/29-layout-validity.md)
+- [30. 实战：实现一个安全的 ArrayVec](./part6/30-project-arrayvec.md)
+
+---
+
 # 附录
 
 - [A. 环境与版本（Rust 1.99.0 / edition 2024）](./appendix/a-setup.md)
 - [B. 常见编译错误逐条解读](./appendix/b-errors.md)
 - [C. 延伸阅读](./appendix/c-reading.md)
+- [D. Rust 正确性验证工具箱](./appendix/d-verification.md)

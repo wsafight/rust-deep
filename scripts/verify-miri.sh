@@ -84,6 +84,12 @@ printf '\n\033[1m== ch23：mini async runtime（手写 Waker）==\033[0m\n'
 #   错了就是内存泄漏或 use-after-free，而**编译器完全看不见**。
 miri_must_pass ch23-project-runtime scheduler "★ 手写 waker 的引用计数配平（含跨线程唤醒）"
 
+printf '\n\033[1m== ch29：类型有效值 ==\033[0m\n'
+miri_must_ub ch29-layout-validity invalid_values "★ 动态字节 2 不能构造 bool"
+
+printf '\n\033[1m== ch30：ArrayVec 安全不变式 ==\033[0m\n'
+miri_must_pass ch30-arrayvec arrayvec "★ 初始化前缀、移动与析构责任"
+
 printf '\n\033[1m== 结果 ==\033[0m\n'
 printf '  PASS=%d  FAIL=%d\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1

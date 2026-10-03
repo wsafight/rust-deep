@@ -10,7 +10,7 @@ tools/evidence.sh ch19-pin
 scripts/verify-evidence.sh ch19      # 13 条断言（PASS=15）
 
 # ★ Miri（需要 nightly，与 verify-all.sh 分开）
-scripts/verify-miri.sh          # 8 组检查（含前置检查）
+scripts/verify-miri.sh          # 9 个测试目标 + 前置检查
 ```
 
 ## 关键结论与断言（13 条，全绿）

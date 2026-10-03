@@ -454,7 +454,7 @@ LLVM 拿到的 `noalias` + `readonly`（第 24 章）就是**建立在这个事�
 
 ```bash
 # ★ 本章的主证据：Miri（需要 nightly，见附录 A）
-scripts/verify-miri.sh      # 7 条：ch25 四条 + ch19 两条 + 前置检查
+scripts/verify-miri.sh      # 9 个测试目标 + 前置检查（全书）
 
 # 辅：MIR 里的 no_retag（只用来破除误解）
 tools/evidence.sh ch25-aliasing

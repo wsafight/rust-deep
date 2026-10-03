@@ -1,6 +1,6 @@
 # Rust 深水区
 
-> Rust 1.99 里那些真正卡人的地方：所有权、Trait、并发、异步与 unsafe
+> Rust 1.99 里那些真正卡人的地方：所有权、Trait、并发、异步、unsafe 与资源语义
 
 ## 这是什么
 
@@ -24,7 +24,7 @@ scripts/verify-all.sh
 scripts/verify-portable.sh
 scripts/verify-evidence.sh ch07
 
-# Miri 验证（8 组检查，需要 nightly；与 stable 验证分开）
+# Miri 验证（9 个测试目标 + 前置检查，需要 nightly；与 stable 验证分开）
 scripts/verify-miri.sh
 
 # 安装并启用本地 pre-commit 检查
@@ -101,10 +101,14 @@ tools/evidence.sh ch16-atomics x86_64-apple-darwin
   | `ch19-pin` | 自引用（一条 `stp`）+ `!Unpin` 的保守性 | 19 |
   | `ch20-async-lifetimes` | 跨 `await` 的借用字段 + `Send` 传染 | 20 |
   | `ch21-afit` | AFIT 单态化（零分配）+ `dyn`/`Send` 的冲突 | 21 |
-  | `ch22-tokio` | `Send + 'static` 的两半（★ 唯一依赖 tokio） | 22 |
+  | `ch22-tokio` | `Send + 'static` 的两半（依赖 tokio） | 22 |
   | `ch23-project-runtime` | mini executor + 手写 waker（**Miri 用例**） | 23 |
   | `ch24-noalias` | `noalias`/`readonly`/alias 折叠 | 24 |
   | `ch25-aliasing` | `UnsafeCell`/`PhantomData` + **Miri 用例** | 25 |
   | `ch26-when-not-to` | 安全版本 vs `unsafe` 版本的指令数对照 | 26 |
+  | `ch27-drop` | drop flags / cleanup / drop check | 27 |
+  | `ch28-cancellation` | abort / `select!` / timeout 的取消语义（依赖 tokio） | 28 |
+  | `ch29-layout-validity` | 布局 / niche / `MaybeUninit` / 有效值 | 29 |
+  | `ch30-arrayvec` | 初始化前缀 / 移动 / 析构责任（**Miri 用例**） | 30 |
 
-- 正文进度：**全书 26 章 + 3 个附录已完成**
+- 正文进度：**全书 30 章 + 4 个附录已完成**

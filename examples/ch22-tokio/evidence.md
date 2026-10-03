@@ -9,15 +9,15 @@
 # ★ 运行期演示
 cargo run -p ch22-tokio            # 预期输出：total = 4
 
-# ★ 证据（本章是全书唯一依赖第三方 crate 的 example）
+# ★ 证据（本章依赖第三方 crate）
 tools/evidence.sh ch22-tokio
 scripts/verify-evidence.sh ch22         # 7 条断言
 ```
 
 ### ⚠️ 本章的 example 依赖 tokio —— 工具链为此加了一个机制
 
-本书其余 example 都是**零依赖**的，`rustc x.rs` 就能编。
-ch22 需要真的链接 tokio，于是：
+大多数 example 都是**零依赖**的，`rustc x.rs` 就能编。
+ch22（以及第 28 章）需要真的链接 tokio，于是：
 
 1. `examples/ch22-tokio/externs` 里逐行写需要哪些 crate（这里是 `tokio`）；
 2. `tools/lib.sh` 的 `rd_prepare_rustc_args` 用

@@ -509,8 +509,50 @@ assert_fn_contains ch26-when-not-to ".O3.s" 'raw_double_add'  'ldr[[:space:]]+w9
 assert_contains ch26-when-not-to ".O3.s" '^_split_and_sum:' "split_at_mut 是安全且等价的替代"
 assert_fn_contains ch26-when-not-to ".O3.s" 'swap_two' 'panic_bounds_check' "swap_two：保留检查（i/j 是外部输入）——安全代码该有的样子"
 
+# ---- ch27: Drop、drop flags 与 panic safety ----
+# 条件移动：MIR 必须记录值是否仍由当前栈帧拥有，并在退出时按位决定是否 drop。
+assert_contains ch27-drop ".mir" 'fn conditional_move' "条件移动样本存在"
+assert_contains ch27-drop ".mir" 'switchInt\(copy _[0-9]+\)' "drop flag 通过条件控制析构路径"
+assert_contains ch27-drop ".mir" 'drop\(_[0-9]+\)' "仍由当前栈帧拥有时执行 drop"
+# panic=unwind：cleanup 路径也析构 guard，随后继续传播。
+assert_contains ch27-drop ".mir" 'unwind_cleanup' "panic cleanup 样本存在"
+assert_contains ch27-drop ".mir" 'resume;' "cleanup 完成后继续传播 panic"
+assert_fails ch27-drop "fail/move_out_of_drop.rs" 'E0509' "实现 Drop 的类型不能直接移出字段"
+assert_fails ch27-drop "fail/dropck.rs" 'E0597' "drop check：析构时借用必须仍有效"
+
+# ---- ch28: async cancellation safety ----
+# 跨 await 的 guard 是状态机字段；future 被取消时，coroutine drop glue 会清理它。
+assert_contains ch28-cancellation ".mir" 'field _s1: DropSignal;' "跨 await 的 guard 被保存为 future 字段"
+assert_contains ch28-cancellation ".mir" 'drop\(.*DropSignal' "状态机的完成/cleanup 路径析构 guard"
+# 先修改再 await：已取出的 item 必须跨挂起点存进状态机。
+assert_adjacent ch28-cancellation ".mir" 'field _s2: u64;' 'field _s3: std::future::Pending' "先 pop 再 await：item 跨挂起点存活"
+# 先 await 再提交：挂起状态不保存 item。
+assert_adjacent ch28-cancellation ".mir" 'field _s2: std::future::Pending' 'variant_fields' "先 await 再 pop：挂起状态里没有 item"
+assert_contains ch28-cancellation ".O3.s" '^_wait_forever:' "可取消 future 的构造函数存在"
+
+# ---- ch29: layout、validity 与 MaybeUninit ----
+assert_contains ch29-layout-validity ".O3.s" '^_rust_layout:' "repr(Rust) 当前布局可观测"
+assert_contains ch29-layout-validity ".O3.s" '^_c_layout:' "repr(C) 布局可观测"
+assert_contains ch29-layout-validity ".O3.s" '^_niche_sizes:' "niche 对 Option 大小的影响可观测"
+assert_contains ch29-layout-validity ".mir" 'MaybeUninit::<u64>::write' "先用 write 完成初始化"
+assert_contains ch29-layout-validity ".mir" 'MaybeUninit::<u64>::assume_init' "初始化后才 assume_init"
+assert_fn_contains ch29-layout-validity ".O3.s" 'read_packed_count' 'ldur[[:space:]]+w0, \[x0, #1\]' "packed 字段使用未对齐读取"
+assert_fn_contains ch29-layout-validity ".O3.s" 'write_then_assume' '^\s*ret' "MaybeUninit 正确使用优化后零开销"
+assert_fails ch29-layout-validity "fail/packed_reference.rs" 'E0793' "不能为 packed 字段创建未对齐引用"
+assert_fails ch29-layout-validity "fail/zeroed_reference.rs" 'invalid_value' "零初始化不能构造引用"
+
+# ---- ch30: ArrayVec —— 初始化前缀就是安全不变式 ----
+assert_contains ch30-arrayvec ".mir" 'MaybeUninit::<T>::write' "push 先初始化槽位"
+assert_contains ch30-arrayvec ".mir" 'MaybeUninit::<T>::assume_init_read' "pop/iterator 按所有权读出已初始化槽位"
+assert_contains ch30-arrayvec ".mir" 'std::ptr::copy::<T>' "insert/remove 使用可重叠移动"
+assert_contains ch30-arrayvec ".mir" 'drop_in_place::<\[T\]>' "Drop 只析构已初始化前缀"
+assert_fn_not_contains ch30-arrayvec ".O3.s" 'sum_arrayvec' '___rust_alloc|_rust_alloc' "固定容量容器不进行堆分配"
+assert_fn_contains ch30-arrayvec ".O3.s" 'sum_array' 'add\.2d' "裸数组对照被 SIMD 向量化"
+assert_fn_not_contains ch30-arrayvec ".O3.s" 'sum_arrayvec' 'add\.2d' "当前编译器未把 ArrayVec 包装完全优化掉"
+assert_fn_contains ch30-arrayvec ".O3.s" 'sum_arrayvec' 'stp[[:space:]]+q0, q1' "ArrayVec 样本仍保留栈上搬运"
+
 # ---- ch22: tokio 实战 —— Send + 'static 的两半 ----
-# ★ 零依赖的 example 不受影响；ch22 需要 tokio（见 examples/ch22-tokio/externs）
+# ch22 与 ch28 需要 tokio（见各自的 externs）；其余既有 example 不受影响。
 assert_contains ch22-tokio ".O3.s" '^_shared_counter:' "tokio::spawn 的任务可编译（锁作用域正确）"
 assert_contains ch22-tokio ".O3.s" '^_blocking_work:'  "spawn_blocking 可编译（FnOnce + Send + 'static）"
 assert_contains ch22-tokio ".O3.s" '^_local_task:'     "LocalSet 可以 spawn !Send 的 future"

@@ -161,7 +161,7 @@ $ grep no_retag .evidence/ch25-aliasing-lib.mir
 
 **这些 `no_retag` 恰恰是"这里不做 retag"的标记** —— 不要当成 retag 的证据。
 
-## Miri 用例清单（`scripts/verify-miri.sh`，7 条全绿）
+## Miri 用例清单（`scripts/verify-miri.sh`，9 个测试目标）
 
 | 目标 | 语义 | 用例数 |
 |---|---|---|
@@ -171,6 +171,9 @@ $ grep no_retag .evidence/ch25-aliasing-lib.mir
 | `ch25-aliasing/aliasing_ub` | 必须**报 UB** | 4 |
 | `ch19-pin/selfref` | 必须**通过** | 5 |
 | `ch19-pin/selfref_ub` | 必须**报 UB** | 2 |
+| `ch23-project-runtime/scheduler` | 必须**通过** | 5 |
+| `ch29-layout-validity/invalid_values` | 必须**报 UB** | 1 |
+| `ch30-arrayvec/arrayvec` | 必须**通过** | 7 |
 
 ### 四个 UB 用例（`aliasing_ub.rs`）
 
@@ -224,4 +227,4 @@ rustc --edition 2024 --crate-type=lib \
 - [x] 实测并**修正**了一条常见误解：`UnsafeCell` **不会**救活已存在的 `&T`
 - [x] rustc 的 `invalid_reference_casting` lint 已落库为反例并加断言
 - [ ] 考虑在"深潜框"里提一句 Tree Borrows（`-Zmiri-tree-borrows`）
-- [ ] 第 26 章（何时不该用 unsafe）需要新 example
+- [x] 第 26 章（何时不该用 unsafe）的 example 已落库
