@@ -263,6 +263,9 @@ impl<T> Family2<T> for Wrapper2 { type Member = Vec<T>; fn wrap(v: T) -> Vec<T> 
 | `sum_windows`（GAT） | **61** | **11** |
 | `sum_windows_manual`（手写） | **62** | **11** |
 
+<details>
+<summary>展开汇编证据片段（可跳过）</summary>
+
 ```asm
 ; GAT 版本
 _sum_windows:
@@ -279,6 +282,8 @@ _sum_windows_manual:
 	...
 	add.2d	v5, v5, v0
 ```
+
+</details>
 
 `diff` 之后只差一处：手写版本多一条 `ldr x11, [x0]`，
 因为 LLVM 对两个版本选了**略微不同的向量化策略**

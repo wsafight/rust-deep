@@ -89,6 +89,31 @@ tokio::select! {
 因此放进 `select!` 的操作必须逐项检查取消安全，不能因为整个宏看起来像普通
 控制流就默认每个分支都能中途丢弃。
 
+### 28.2.1 循环重建 future，会把已经消费的前缀一起丢掉
+
+单次 `recv` 可以是 cancellation-safe，但两个 `recv` 组成的操作未必是：
+
+```rust,ignore
+async fn read_pair(receiver: &mut UnboundedReceiver<u8>) -> [u8; 2] {
+    let first = receiver.recv().await.unwrap();
+    let second = receiver.recv().await.unwrap();
+    [first, second]
+}
+```
+
+测试 `recreated_read_loses_prefix` 每轮先送入一个字节，再在 `select!` 中创建一个
+新的 `read_pair`。`biased;` 让读取分支先被 poll：它消费 first，在第二次 recv
+挂起，然后另一个立即就绪的分支获胜。下一轮 first 已随旧 future 消失。
+重复两轮后再送入 3、4，实际得到 `[3, 4]`，1、2 已永久丢失。
+
+对照 `preserved_read_keeps_prefix` 把 future 创建在循环外，用 `tokio::pin!`
+固定它，并把 `&mut read` 交给 `select!`。落败时只结束本次临时借用，真正
+拥有 first 的状态机仍在外层。随后送入 2，继续 poll 同一状态机得到 `[1, 2]`。
+
+这两个测试没有依赖 sleep 或线程碰巧如何调度，而是用固定轮询顺序和空 channel
+精确构造挂起点。但“保存 future”只保证它在这段作用域内保留部分进度；整个
+作用域最终被取消时，仍需外部缓冲、持久状态或协议保证恢复。
+
 ## 28.3 `timeout` 不是后台继续运行
 
 `tokio::time::timeout(duration, future)` 可以理解为 future 与计时器的竞争。
@@ -145,6 +170,24 @@ async fn wait_then_remove(queue: Arc<Mutex<Vec<u64>>>) {
 使用 `JoinSet` 聚合子任务，在父操作退出时明确 abort 并 drain 结果。结构化并发
 不会自动让业务操作可回滚，但会让“谁负责结束任务”变得可追踪。
 
+### 28.6.1 优雅停机与异步清理
+
+优雅停机至少分成三个步骤：停止接收新工作、通知现有任务、等待任务完成清理。
+本章 `shutdown_and_join` 用 `watch<bool>` 广播停机信号，并等待 JoinHandle；
+测试断言 await 返回前 guard 已经析构。生产中也可以使用 Tokio 生态的
+`tokio_util::sync::CancellationToken` 表达协作取消，再配合 JoinSet 收集结果。
+token 负责通知，不负责自动等待子任务结束。
+
+`Drop::drop` 是同步接口，不能在里面直接 await。反例 `fail/await_in_drop.rs`
+固定验证 E0728。若资源需要发送退出帧、提交事务或等待 flush，应提供显式的
+`async close` / `shutdown` 方法，由拥有资源的任务在正常退出路径中 await；
+Drop 只能作为同步释放或尽力清理的兜底。不要把“在 Drop 中 spawn 清理任务”
+写成可靠保证：runtime 退出时，这个新任务也可能来不及完成。
+
+若优雅停机需要设置最后期限，可以先协作通知、等待完成，超时后才 abort 并
+继续等待 handle。这个降级路径必须接受异步清理可能不完整，不能承诺远端状态
+已经回滚。
+
 ## 28.7 亲手验证
 
 ```bash
@@ -157,12 +200,14 @@ grep -n 'DropSignal\|Pending' .evidence/ch28-cancellation-lib.mir
 scripts/verify-evidence.sh ch28
 ```
 
-四组测试分别验证：
+测试分别验证：
 
 1. abort 会 drop 状态机；
 2. `select!` 会 drop loser；
 3. timeout 会 drop inner future；
 4. 先修改再 await 会留下半完成状态，先等待再提交则不会。
+5. 重建 future 丢失读取前缀，而保留并继续 poll 同一个 future 可以恢复进度；
+6. 协作停机后等待 handle，才能观察任务已经释放资源。
 
 ## 28.8 小结
 

@@ -100,14 +100,16 @@ _with_lifetime:
 _without_lifetime = _with_lifetime
 ```
 
-同一件事在"显式标注 vs 省略"上更明显：
+仓库还保留了一个相同签名、相同函数体的历史对照：
 
 ```llvm
 @longest_elided = unnamed_addr alias { ptr, i64 } (ptr, i64, ptr, i64), ptr @longest
 ```
 
-`longest` 和 `longest_elided` 的**唯一区别**就是签名里写没写 `'a`——
-LLVM 认为它们是同一个函数。
+注意：`longest_elided` 虽然名字里有 elided，签名实际也写了 `'a`。
+它的 alias 只能证明两个实现被折叠，不能证明省略规则；真正的显式 / 省略
+对照是前面的 `with_lifetime` 与 `without_lifetime`。两个独立输入借用又返回
+引用时，通常恰好不能直接省略关系，这也是 2.0 报 E0106 的原因。
 
 > **所以"生命周期有没有运行时开销"是个范畴错误。**
 > 不是"开销很小"，是**根本不参与运行时**。
@@ -241,6 +243,56 @@ pub fn get2(&self, other: &str) -> &str { other }   // 报错
 
 **这证明省略规则只是一个默认选择**，一旦默认选择与函数体冲突，照样报错。
 它不是"编译器帮你补全了正确的标注"，而是"编译器替你猜了一个，猜错了就报错"。
+
+### 2.4.1 `impl Trait` 的捕获不是引用省略规则
+
+Edition 2024 中，返回位置的 `impl Trait` 默认捕获作用域内的泛型参数，
+包括生命周期。即使隐藏的具体类型只是 `()`，调用方也不能只看函数体推断
+返回值与输入无关：对外的契约在签名里。
+
+```rust,compile_fail
+fn capture_all(_: &()) -> impl Sized {}
+
+fn require_static(input: &()) -> impl Sized + 'static {
+    capture_all(input)
+}
+```
+
+当前诊断是 `lifetime may not live long enough`。对这种确实不借用输入的返回值，
+用 `use<>` 明确写出空捕获集合：
+
+```rust
+fn capture_none(_: &()) -> impl Sized + use<> {}
+
+fn require_static(input: &()) -> impl Sized + 'static {
+    capture_none(input)
+}
+```
+
+`use<>` 控制不透明返回类型允许捕获哪些泛型参数，不改变函数体的所有权规则。
+它不是“把借用变成 `'static`”的操作。如果返回 iterator 真正借用了输入，就必须
+保留相应的生命周期：
+
+```rust
+fn chars<'a>(input: &'a str) -> impl Iterator<Item = char> + use<'a> {
+    input.chars()
+}
+```
+
+把这里的 `use<'a>` 改成 `use<>` 会报 E0700。签名里的 `+ 'a` 是返回类型必须
+满足的 outlives 约束，`use<'a>` 是允许捕获的集合，两者不是同一个概念。
+若函数还有类型或 const 泛型，当前精确捕获列表必须列出全部这类参数；它们
+即使没有出现在具体返回类型里，也不能随意从列表中省掉。
+
+`use<..>` 语法并非 Edition 2024 才能使用；这里的版本变化是 2024 对普通函数、
+固有方法的 RPIT 默认生命周期捕获规则。trait 方法的 RPITIT 和 `async fn`
+原本就捕获作用域内的生命周期，不要把它们都理解成同一次规则变化。
+
+复现与正反例：`examples/ch02-lifetimes/tests/capture.rs`、
+`fail/rpit_overcapture.rs`、`fail/rpit_missing_capture.rs`。
+
+规则出处：[Edition Guide：RPIT lifetime capture](https://doc.rust-lang.org/edition-guide/rust-2024/rpit-lifetime-capture.html)、
+[Reference：precise capturing](https://doc.rust-lang.org/reference/types/impl-trait.html#precise-capturing)。
 
 ## 2.5 反直觉的点
 

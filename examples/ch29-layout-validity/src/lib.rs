@@ -8,6 +8,8 @@
 use std::mem::{MaybeUninit, align_of, offset_of, size_of};
 use std::num::NonZeroU64;
 
+pub mod ffi;
+
 // ============================================================
 // 1) repr(Rust) 与 repr(C)
 // ============================================================

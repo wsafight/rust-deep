@@ -2,6 +2,17 @@
 
 > 最后验证：**rustc 1.99.0** / LLVM 23.1.1 / `aarch64-apple-darwin`
 
+## C ABI 集成探针
+
+```bash
+cargo test -p ch29-layout-validity --test ffi
+bash examples/ch29-layout-validity/c-ffi/run.sh
+```
+
+Rust 的 AddResult 与 C 头文件各自验证字段偏移与结构体大小，C 调用方通过
+native staticlib 验证正常结果与溢出状态码，兼顾布局、符号与调用约定。
+这个无指针整数接口不能推广为任意外部内存的 FFI 证明。
+
 ## 当前工具链的布局观察
 
 ```bash

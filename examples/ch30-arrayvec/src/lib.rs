@@ -123,6 +123,41 @@ impl<T, const N: usize> ArrayVec<T, N> {
         }
     }
 
+    pub fn try_extend(&mut self, values: impl IntoIterator<Item = T>) -> Result<(), T> {
+        for value in values {
+            self.try_push(value)?;
+        }
+        Ok(())
+    }
+
+    pub fn retain_mut(&mut self, mut keep: impl FnMut(&mut T) -> bool) {
+        let original_len = self.len;
+        self.len = 0;
+        let mut guard = RetainGuard {
+            vector: self,
+            processed: 0,
+            deleted: 0,
+            original_len,
+        };
+
+        while guard.processed < guard.original_len {
+            let base = guard.vector.data.as_mut_ptr().cast::<T>();
+            let current = unsafe { base.add(guard.processed) };
+            if keep(unsafe { &mut *current }) {
+                if guard.deleted > 0 {
+                    unsafe {
+                        ptr::copy(current, base.add(guard.processed - guard.deleted), 1);
+                    }
+                }
+                guard.processed += 1;
+            } else {
+                guard.processed += 1;
+                guard.deleted += 1;
+                unsafe { ptr::drop_in_place(current) };
+            }
+        }
+    }
+
     /// Builds elements left-to-right. Error return and panic both drop the initialized prefix.
     pub fn try_from_fn<E>(mut make: impl FnMut(usize) -> Result<T, E>) -> Result<Self, E> {
         let mut out = Self::new();
@@ -134,6 +169,39 @@ impl<T, const N: usize> ArrayVec<T, N> {
             }
         }
         Ok(out)
+    }
+}
+
+struct RetainGuard<'a, T, const N: usize> {
+    vector: &'a mut ArrayVec<T, N>,
+    processed: usize,
+    deleted: usize,
+    original_len: usize,
+}
+
+impl<T, const N: usize> Drop for RetainGuard<'_, T, N> {
+    fn drop(&mut self) {
+        if self.deleted > 0 {
+            let base = self.vector.data.as_mut_ptr().cast::<T>();
+            unsafe {
+                ptr::copy(
+                    base.add(self.processed),
+                    base.add(self.processed - self.deleted),
+                    self.original_len - self.processed,
+                );
+            }
+        }
+        self.vector.len = self.original_len - self.deleted;
+    }
+}
+
+impl<T: Clone, const N: usize> Clone for ArrayVec<T, N> {
+    fn clone(&self) -> Self {
+        let mut cloned = Self::new();
+        for value in self.as_slice() {
+            assert!(cloned.try_push(value.clone()).is_ok());
+        }
+        cloned
     }
 }
 

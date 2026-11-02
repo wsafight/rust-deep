@@ -144,3 +144,51 @@ pub async fn queue_after_safe_cancel() -> Vec<u64> {
     .await;
     Arc::try_unwrap(queue).unwrap().into_inner().unwrap()
 }
+
+async fn read_pair(receiver: &mut tokio::sync::mpsc::UnboundedReceiver<u8>) -> [u8; 2] {
+    let first = receiver.recv().await.unwrap();
+    let second = receiver.recv().await.unwrap();
+    [first, second]
+}
+
+pub async fn recreated_read_loses_prefix() -> [u8; 2] {
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    for value in [1, 2] {
+        sender.send(value).unwrap();
+        tokio::select! {
+            biased;
+            _ = read_pair(&mut receiver) => unreachable!(),
+            _ = ready(()) => {}
+        }
+    }
+    sender.send(3).unwrap();
+    sender.send(4).unwrap();
+    read_pair(&mut receiver).await
+}
+
+pub async fn preserved_read_keeps_prefix() -> [u8; 2] {
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    sender.send(1).unwrap();
+    let read = read_pair(&mut receiver);
+    tokio::pin!(read);
+    tokio::select! {
+        biased;
+        _ = &mut read => unreachable!(),
+        _ = ready(()) => {}
+    }
+    sender.send(2).unwrap();
+    read.await
+}
+
+pub async fn shutdown_and_join() -> usize {
+    let dropped = Arc::new(AtomicUsize::new(0));
+    let guard = DropSignal(Arc::clone(&dropped));
+    let (shutdown, mut stopped) = tokio::sync::watch::channel(false);
+    let task = tokio::spawn(async move {
+        let _guard = guard;
+        stopped.wait_for(|requested| *requested).await.unwrap();
+    });
+    shutdown.send(true).unwrap();
+    task.await.unwrap();
+    dropped.load(Ordering::SeqCst)
+}

@@ -2,6 +2,8 @@
 
 [前言](./preface.md)
 
+- [0. 先读懂证据：MIR、LLVM IR 与汇编](./00-reading-evidence.md)
+
 ---
 
 # 第一部分：所有权的心智模型

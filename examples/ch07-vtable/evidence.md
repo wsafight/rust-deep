@@ -5,13 +5,20 @@
 
 ## 复现命令
 
+`tests/upcasting.rs` 验证 dyn 子 trait 向父 trait 强制转换后，方法行为与数据
+地址不变；不假定 vtable 地址相同。逆向转换反例报 E0308。
+
+```bash
+cargo test -p ch07-vtable --test upcasting
+```
+
 ```bash
 tools/evidence.sh ch07-vtable        # 生成 .s / .ll / .mir
-scripts/verify-evidence.sh ch07           # 跑本章 6 条断言
+scripts/verify-evidence.sh ch07
 tools/objdump.sh ch07-vtable 3       # 需要反汇编时
 ```
 
-## 关键结论与断言（6 条，全绿）
+## 指令映射的关键结论与断言
 
 | # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|

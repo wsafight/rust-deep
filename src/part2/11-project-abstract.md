@@ -333,6 +333,34 @@ Rust 的 specialization 是更大的语言设计问题，目前仍未稳定；�
 3. 再问"**要不要 blanket impl**"？要 → 接受没有特化；
 4. 最后问"**闭包要接受多长的生命周期**"？任意 → `for<'a>`。
 
+### 11.7.1 错误边界：保留类型，还是擦除类型
+
+库内需要按错误种类恢复时，保留 `enum ConfigError { Io(...), Parse(...) }`；
+应用层只需传播时，可以擦除为 `Box<dyn Error + Send + Sync + 'static>`。
+完整实现见 `examples/ch11-project-abstract/src/errors.rs`：
+
+```rust,ignore
+pub fn parse_limit(mut reader: impl Read) -> Result<usize, ConfigError> {
+    let mut text = String::new();
+    reader.read_to_string(&mut text)?;
+    Ok(text.trim().parse()?)
+}
+```
+
+两处 `?` 的来源分别是 IO 错误和 ParseIntError，通过各自的 `From` 实现转换。
+`Display` 提供上下文，`Error::source` 保留原始错误链；测试分别检查两类变体、
+source 与错误擦除后仍然满足的 Send / Sync 契约。
+
+成功值满足 Send 不代表错误值也满足。不能先把错误擦成 `Box<dyn Error>`，再
+期待 `?` 自动补出 Send / Sync；这部分契约已经丢失。反例
+`fail/error_not_send_sync.rs` 固定验证 E0277。这里的 `'static` 表示不持有短借用，
+不是永不释放。需要结构化恢复时，也别过早擦除具体错误类型。
+
+```bash
+cargo test -p ch11-project-abstract --test errors
+scripts/verify-evidence.sh ch11
+```
+
 ## 11.8 亲手验证
 
 ```bash

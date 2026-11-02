@@ -6,10 +6,10 @@
 
 ```bash
 tools/evidence.sh ch12-send-sync
-scripts/verify-evidence.sh ch12       # 9 条断言（PASS=11）
+scripts/verify-evidence.sh ch12
 ```
 
-## 关键结论与断言（9 条，全绿）
+## Send / Sync 的关键结论与断言
 
 | # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|
@@ -252,6 +252,23 @@ error[E0277]: `std::sync::MutexGuard<'_, u64>` cannot be sent between threads sa
 error[E0277]: `Cell<u64>` cannot be shared between threads safely
    = help: the trait `Sync` is not implemented for `Cell<u64>`
    = note: required for `Arc<Cell<u64>>` to implement `Send`
+```
+
+## 闭包捕获与调用 trait
+
+`tests/closures.rs` 验证三个独立样本：
+
+| 样本 | 观察结果 |
+|---|---|
+| `owned_reader` | 按值捕获 String 的 `move` 闭包仍可通过 `&self` 重复调用 |
+| `counter` | `FnMut` 重复调用得到 `(1, 2)` |
+| `owned_once` | `FnOnce` 将 String 的所有权交给调用方 |
+| `fail/fnmut_as_fn.rs` | E0594，`Fn` 接口不能修改捕获变量 |
+| `fail/fnonce_as_fnmut.rs` | E0507，`FnMut` 接口不能移出非 Copy 捕获值 |
+
+```bash
+cargo test -p ch12-send-sync
+scripts/verify-evidence.sh ch12
 ```
 
 ## 交叉验证（可选）

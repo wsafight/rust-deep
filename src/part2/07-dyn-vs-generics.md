@@ -116,6 +116,8 @@ _dyn_area:
 
 ### 7.2.2 泛型方法为什么破坏这个布局
 
+![Trait object 的数据与 vtable 指针示意；不是稳定 ABI](../images/vtable.svg)
+
 `fn insert<T: ToString>(&mut self, key: &str, value: T)` ——
 每个 `T` 都需要**一个不同的函数**（单态化）：
 
@@ -131,6 +133,24 @@ _dyn_area:
 
 所以编译器说："**needs to allow building a vtable**"——
 它的意思就是"我没法为这个 trait 生成一张定长的表"。
+
+### 7.2.2.1 trait upcasting：向父 trait 收缩能力
+
+```rust
+trait Shape { fn area(&self) -> f64; }
+trait Drawable: Shape { fn draw(&self); }
+
+fn as_shape(value: &dyn Drawable) -> &dyn Shape {
+    value
+}
+```
+
+不需要知道具体实现类型，也不需要重新分配对象。向上转换保持同一个具体对象，
+但不承诺 vtable 指针逐位不变；多 supertrait 的元数据可能需要调整。正例见
+`tests/upcasting.rs`。逆向转换不能自动恢复子 trait，反例
+`fail/downcast_trait.rs` 报 E0308。不要把某次 vtable 偏移当成稳定 ABI。
+
+规则出处：[Reference：unsized coercions](https://doc.rust-lang.org/reference/type-coercions.html#unsized-coercions)。
 
 ### 7.2.3 返回 `Self` 为什么也不行
 
@@ -159,6 +179,9 @@ pub fn area_dyn(s: &dyn Shape) -> f64 { s.area() }         // dyn
 pub fn area_boxed(s: &Box<dyn Shape>) -> f64 { s.area() }  // Box<dyn>
 ```
 
+<details>
+<summary>展开汇编证据片段（可跳过）</summary>
+
 ```asm
 ; 泛型 + 内联：完全消失，只剩一次乘法
 _call_generic:
@@ -178,6 +201,8 @@ _area_boxed:
 	mov	x0, x8
 	br	x1
 ```
+
+</details>
 
 **这是这个最小调用点里能直接看到的动态分发成本**：
 

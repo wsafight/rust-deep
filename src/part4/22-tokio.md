@@ -7,6 +7,9 @@
 
 ## 先把工具认清
 
+> 阅读卡片：前置第 12、18、20 章。先分清 `Send` 与 `'static` 各自约束什么，
+> 再读调度与阻塞；遇到取消和停机问题，直接转到第 28 章。
+
 `#[tokio::main]` 创建 runtime 并执行入口 future；`tokio::spawn(future)`
 提交可跨 worker 线程调度的任务；`spawn_blocking` 把阻塞或 CPU 密集闭包移到
 专用线程池；`LocalSet::spawn_local` 则运行不能跨线程的 `!Send` future。
@@ -497,6 +500,38 @@ async fn main() { ... }
 
 （这时候 `spawn` 仍然要求 `Send` —— 因为 tokio 的类型签名没变。
 要真正 `!Send`，得用 `LocalSet`。）
+
+### 22.4.1 Stream、异步迭代与背压
+
+Future 产出一次结果；Stream 每次 poll 产出 `Poll<Option<Item>>`，Some 是
+下一项，None 表示结束。这里使用 tokio-stream 的 StreamExt，不把生态 trait
+当成标准库语法：
+
+```rust,ignore
+use tokio_stream::StreamExt;
+use tokio_stream::wrappers::ReceiverStream;
+
+let mut stream = ReceiverStream::new(receiver);
+while let Some(item) = stream.next().await {
+    process(item).await;
+}
+```
+
+`next()` 将读取下一项包装成 future，不会新建线程。若流不满足 Unpin，要先
+pin 住它，再通过 pinned 引用使用相应接口，不能用 unsafe 随意移动其状态。
+
+背压来自有界队列或并发上限，不是 Stream 自动提供。`tests/streams.rs` 创建
+容量为 1 的 channel：存入第一项后，第二次 send 必须 Pending；消费释放槽位
+后，同一个 send 才完成。生产者关闭且队列排空时，流才返回 None。测试用固定
+轮询顺序构造交错，不依赖 sleep。
+
+若无上限地把每项 spawn 出去，读取很快，实际处理任务却越积越多，背压就被
+绕过了。应限制在途任务，或使用明确的有界并发策略。`select!` 循环能否重建
+读取操作，还要检查第 28 章的取消安全。
+
+```bash
+cargo test -p ch22-tokio --test streams
+```
 
 ## 22.5 亲手验证
 

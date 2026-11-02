@@ -2,7 +2,7 @@
 
 > 最后验证：**rustc 1.99.0** / Tokio 1.53.1 / `aarch64-apple-darwin`
 
-## 四组运行期证据
+## 运行期证据
 
 ```bash
 cargo test -p ch28-cancellation
@@ -15,9 +15,16 @@ cargo test -p ch28-cancellation
 | `timeout` 到期 | inner future 的 guard 析构 1 次 |
 | 先 `pop` 再 `.await`，随后取消 | 队列从 `[7]` 变成 `[]` |
 | 先 `.await` 再 `pop`，随后取消 | 队列仍为 `[7]` |
+| 循环内重建 `read_pair` | 两轮取消消费掉 1、2，随后只能读到 `[3, 4]` |
+| 外部保存并 pin 同一 `read_pair` | 落败后继续 poll，读到 `[1, 2]` |
+| `watch` 协作停机后 await handle | 正常退出且 guard 析构 1 次 |
 
 前三组证明“取消的机械动作就是 drop future”。最后两组证明 drop 只能释放
 状态机持有的资源，不能撤销已经提交到其他对象或外部系统的副作用。
+
+重建与保留读取的对照使用 `biased;` 和 channel 的 Pending 状态构造确定性交错，
+不依赖定时器精度。`fail/await_in_drop.rs` 另验证 Drop 内 await 报 E0728；
+这不是业务取消安全的类型证明，而是说明可靠异步清理需要显式异步接口。
 
 ## MIR 证据
 

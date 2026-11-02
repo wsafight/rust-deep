@@ -119,6 +119,9 @@ assert_eq!(DATA.load(Ordering::Relaxed), 42);
 
 原始输出：
 
+<details>
+<summary>展开汇编证据片段（可跳过）</summary>
+
 ```asm
 _load_relaxed:                 _load_acquire:              _load_seqcst:
 	ldr	x0, [x0]        	ldapr	x0, [x0]       	ldar	x0, [x0]
@@ -140,6 +143,8 @@ _compare_exchange:
 	cset	w0, eq
 	ret
 ```
+
+</details>
 
 **这就是"内存序是具体的"最直接的画面**：不同的 `Ordering`
 生成的是**不同的指令**，不是同一段代码加不同的注释。
@@ -178,6 +183,9 @@ tools/evidence.sh ch16-atomics x86_64-apple-darwin
 
 x86_64 的原始输出：
 
+<details>
+<summary>展开汇编证据片段（可跳过）</summary>
+
 ```asm
 _load_relaxed:                 _load_acquire:              _load_seqcst:
 	movq	(%rdi), %rax    	movq	(%rdi), %rax   	movq	(%rdi), %rax
@@ -198,6 +206,8 @@ _compare_exchange:
 	sete	%al
 	retq
 ```
+
+</details>
 
 **这张表说明了两件事**：
 
@@ -249,6 +259,33 @@ ch16: ldadd    ← fetch_add(Relaxed)
 drop 的递减用 `Release`，最后一个持有者再执行 acquire fence**。为什么够用？
 因为"增加引用计数"本身不发布 payload，**真正销毁对象前才需要同步** ——
 它必须看到之前所有的写。这就是 `Arc` 的健全性论证的核心（第 13 章）。
+
+### 16.2.4 指令映射不是协议正确性证明：用 Loom 补上反例
+
+本章的汇编证据只回答“特定 rustc、目标架构、优化级别生成什么指令”，
+不能证明一个发布协议是否选对内存序。`tests/publication.rs` 用 Loom 的
+AtomicBool、AtomicUsize、Arc 和 thread 建立一个两线程、一次发布的模型：
+
+```text
+writer: DATA.store(42, Relaxed) -> READY.store(true, Release)
+reader: if READY.load(Acquire) { assert DATA.load(Relaxed) == 42 }
+```
+
+Release/Acquire 版本在这个有界模型探索的执行中通过；把标志的读写都换成
+Relaxed，Loom 找到“READY 为 true，DATA 仍为 0”的反例。测试用
+`#[should_panic(expected = "published data")]` 要求这个反例确实发生，而不是
+把任何 panic 都当作验证成功。DATA 也使用原子类型，因此这里检查的是协议
+错误，不需要先在普通硬件上执行数据竞争 UB。
+
+```bash
+cargo test -p ch16-atomics --test publication --locked
+```
+
+没有忙等循环，所以状态空间很小。模型没有证明最终一定读到 true，也没有
+覆盖所有可能的应用代码和硬件行为。它和汇编承担不同的证明责任，边界见
+[附录 D](../appendix/d-verification.md)。
+
+工具的模型与限制以 [Loom 0.7.2 文档](https://docs.rs/loom/0.7.2/loom/) 为准。
 
 ## 16.3 为什么必须这样设计
 

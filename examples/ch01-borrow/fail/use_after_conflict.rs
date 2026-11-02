@@ -15,14 +15,14 @@
 //   5 |     if flag { println!("{first}"); }
 //     |                              ----- immutable borrow later used here
 //
-// ★ 对照 `src/lib.rs` 里的 `branch_all_use`：**两个分支都用**就能编译过。
-//   区别不在作用域，而在"if 之后还有没有路径能到达使用点"。
+// 对照 `branch_all_use` / `branch_one_use`：条件使用都位于 push 前，才能编译过。
+// 关键是冲突与使用的先后顺序，不是使用引用的分支数量。
 
 fn main() {
     let flag = std::env::args().len() > 1;
     let mut v = vec![1u64, 2, 3];
     let first = &v[0];
     v.push(4);                              // 冲突点
-    if flag { println!("{first}"); }        // 只有一个分支用借用 → E0502
+    if flag { println!("{first}"); }        // 修改之后仍使用旧引用 → E0502
     println!("{}", v.len());
 }

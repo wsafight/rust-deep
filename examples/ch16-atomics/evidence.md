@@ -2,6 +2,20 @@
 
 > 最后验证：**rustc 1.99.0**（2026-09-28）/ LLVM 23.1.1 / `aarch64-apple-darwin`
 
+## 协议模型：Release/Acquire 与 Relaxed 的正反对照
+
+```bash
+cargo test -p ch16-atomics --test publication --locked
+```
+
+`tests/publication.rs` 在两线程、单次发布的有界 Loom 模型中验证：
+
+- `release_acquire_publishes_the_data`：读到 ready 后，data 必须为 42；
+- `relaxed_flag_does_not_publish_the_data`：必须找到 `published data` 断言失败的执行。
+
+两个测试都通过才是预期结果。模型检验发布协议，后续汇编断言检验指令映射，
+两者不能相互替代。Loom 只作为 dev-dependency，不进入本章生产样本和汇编产物。
+
 ## 复现命令
 
 ```bash

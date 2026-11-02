@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 290" role="img" aria-labelledby="title desc">
+  <title id="title">Trait object 的数据指针与 vtable 指针</title>
+  <desc id="desc">数据指针指向具体对象，vtable 指针指向当前实现的析构信息、大小、对齐、方法等元数据，不是稳定 ABI。</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#334155"/></marker></defs>
+  <rect width="820" height="290" rx="12" fill="#f1f5f9"/>
+  <g font-family="sans-serif" font-size="17" fill="#0f172a" text-anchor="middle">
+    <text x="155" y="42">&amp;dyn Trait</text>
+    <rect x="40" y="70" width="230" height="65" rx="6" fill="#dbeafe" stroke="#2563eb"/><text x="155" y="109">data pointer</text>
+    <rect x="40" y="145" width="230" height="65" rx="6" fill="#dbeafe" stroke="#2563eb"/><text x="155" y="184">vtable pointer</text>
+    <rect x="445" y="50" width="330" height="65" rx="6" fill="#dcfce7" stroke="#15803d"/><text x="610" y="89">具体 T 的数据</text>
+    <rect x="445" y="140" width="330" height="90" rx="6" fill="#e2e8f0" stroke="#64748b"/><text x="610" y="175">析构信息 / size / align</text><text x="610" y="207">方法入口与其他元数据</text>
+    <text x="410" y="267" font-size="14">vtable 槽位、偏移与 supertrait 表示属于当前实现，不是稳定 Rust ABI</text>
+  </g>
+  <g fill="none" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"><path d="M270 103L355 103L355 82H440"/><path d="M270 178H440"/></g>
+</svg>

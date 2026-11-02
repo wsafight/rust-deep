@@ -61,14 +61,32 @@ bb0: {
 }
 ```
 
-把 `let seen = *r;` 删掉，同一份代码立刻报 E0502。
+把 `let seen = *r;` 移到 `c.bump()` 后面，同一份代码立刻报 E0502。
 **变的是使用点的位置，词法作用域一点没动。**
 
 ## 证据 3：`branch_all_use` —— 路径敏感
 
 `if` / `else` **两个分支都**使用 `first`，`if` 之后的 `v.push(4)` 合法。
-对照 `fail/use_after_conflict.rs`：**只在一个分支里**使用，就报 E0502 ——
-因为"不走 if"那条路径仍然能到达使用点。
+`branch_one_use` 只在一个分支使用 `first`，但使用位于 `push` 前面，同样通过。
+对照 `fail/use_after_conflict.rs`：`push` 位于条件使用之前，所以报 E0502。
+
+## 条件返回借用的分析边界
+
+`fail/conditional_return.rs` 在 `if let Some(last) = values.last()` 中提前返回
+引用，随后在未命中的路径 push。Rust 1.99.0 仍报 E0502：
+
+```text
+returning this value requires that `*values` is borrowed for ...
+cannot borrow `*values` as mutable because it is also borrowed as immutable
+```
+
+`src/lib.rs::last_or_push` 改为先检查 `is_empty`、必要时 push、最后才借出元素。
+`tests/nll.rs` 验证空容器插入一次、非空容器不变，以及单分支使用后仍可修改。
+
+```bash
+cargo test -p ch01-borrow
+scripts/verify-evidence.sh ch01
+```
 
 ## 证据 4：反例的错误信息结构（`fail/E0502.rs`）
 

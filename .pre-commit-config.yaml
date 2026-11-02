@@ -38,3 +38,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^(Cargo\.toml|Cargo\.lock|examples/|scripts/|tools/|rust-toolchain\.toml$)
+
+      - id: ffi-test
+        name: native C ABI probe
+        entry: bash examples/ch29-layout-validity/c-ffi/run.sh
+        language: system
+        pass_filenames: false
+        files: ^examples/ch29-layout-validity/(src/ffi\.rs|c-ffi/)

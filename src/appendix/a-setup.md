@@ -37,7 +37,7 @@ rustc -vV
 rustup toolchain install 1.99.0 -c rustfmt -c clippy
 ```
 
-### Miri（可选，用于第 19、23、25 章）
+### Miri（可选，用于第 19、23、25、29、30 章）
 
 Miri **不在 stable 里** —— 它是独立的 MIR 解释器，只随 nightly 发布。
 
@@ -99,7 +99,7 @@ scripts/verify-all.sh
 scripts/verify-portable.sh
 scripts/verify-evidence.sh ch07
 
-# Miri 验证（9 个测试目标 + 前置检查，需要 nightly；与上面分开）
+# Miri 验证（10 个测试目标 + 前置检查，需要 nightly；与上面分开）
 scripts/verify-miri.sh
 ```
 
@@ -149,6 +149,16 @@ cargo expand -p ch22-tokio --bin ch22-tokio
 
 ## A.5 平台差异清单
 
+`scripts/verify-portable.sh` 将当前激活的 rustup 工具链显式传给子进程，避免
+mdBook 在临时目录调用 rustdoc 时切换到用户默认版本。直接测试书稿时也可用：
+
+```bash
+RUSTUP_TOOLCHAIN=1.99.0 mdbook test
+```
+
+书稿的代码测试通过 `book.toml` 中 `[rust] edition = "2024"` 固定 edition；
+项目 Cargo.toml 的 edition 不会自动成为 mdBook 的默认值。
+
 本书的主验证目标是 macOS / AArch64，但**书里的结论都标注了平台**。
 遇到差异的地方：
 
@@ -167,7 +177,7 @@ cargo expand -p ch22-tokio --bin ch22-tokio
 | 路径 | 作用 |
 |---|---|
 | `src/` | mdBook 正文（唯一的书稿来源） |
-| `examples/` | 每章一个独立 crate，承载书中所有可运行示例 |
+| `examples/` | 31 个独立 crate；第 5 章含两个对照样本 |
 | `examples/*/src/lib.rs` | 该章的正例（可编译） |
 | `examples/*/fail/*.rs` | 该章的**反例**（故意编译不过，不参与构建） |
 | `examples/*/tests/*.rs` | 集成测试与 Miri 用例（UB 用例用 `#![cfg(miri)]` 包住） |

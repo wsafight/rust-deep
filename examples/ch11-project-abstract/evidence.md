@@ -4,12 +4,20 @@
 
 ## 复现命令
 
+`src/errors.rs` 用 ConfigError 区分 IO / 解析错误，提供 Display、source、From；
+`tests/errors.rs` 验证错误链与线程安全约束。`fail/error_not_send_sync.rs`
+验证 Box<dyn Error> 不能通过 `?` 自动补成 Send / Sync（E0277）。
+
 ```bash
-tools/evidence.sh ch11-project-abstract
-scripts/verify-evidence.sh ch11       # 10 条断言（PASS=12）
+cargo test -p ch11-project-abstract --test errors
 ```
 
-## 关键结论与断言（10 条，全绿）
+```bash
+tools/evidence.sh ch11-project-abstract
+scripts/verify-evidence.sh ch11
+```
+
+## 抽象层的关键结论与断言
 
 | # | 结论 | 断言（`scripts/verify-evidence.sh`） |
 |---|---|---|

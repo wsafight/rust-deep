@@ -89,6 +89,7 @@ miri_must_ub ch29-layout-validity invalid_values "★ 动态字节 2 不能构�
 
 printf '\n\033[1m== ch30：ArrayVec 安全不变式 ==\033[0m\n'
 miri_must_pass ch30-arrayvec arrayvec "★ 初始化前缀、移动与析构责任"
+miri_must_ub ch30-arrayvec arrayvec_ub "先发布长度再调用用户代码会在 unwind 中读取未初始化槽位"
 
 printf '\n\033[1m== 结果 ==\033[0m\n'
 printf '  PASS=%d  FAIL=%d\n' "$pass" "$fail"

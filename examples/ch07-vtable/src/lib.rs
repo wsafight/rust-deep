@@ -78,3 +78,17 @@ pub fn area_dyn(s: &dyn Shape) -> f64 {
 pub fn area_boxed(s: &Box<dyn Shape>) -> f64 {
     s.area()
 }
+
+pub trait Drawable: Shape {
+    fn draw(&self) -> &'static str;
+}
+
+impl Drawable for Sq {
+    fn draw(&self) -> &'static str {
+        "square"
+    }
+}
+
+pub fn upcast_shape(value: &dyn Drawable) -> &dyn Shape {
+    value
+}

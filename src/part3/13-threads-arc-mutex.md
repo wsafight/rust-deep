@@ -74,6 +74,9 @@ awk '/^__RNvCs8vZMNLDlXs5_3lib9clone_arc:/,/cfi_endproc/' .evidence/ch13-arc-mut
 
 ### 13.2.1 `clone_arc` 包装函数的完整函数体
 
+<details>
+<summary>展开汇编证据片段（可跳过）</summary>
+
 ```asm
 __RNvCs8vZMNLDlXs5_3lib9clone_arc:
 	ldr	x8, [x0]         ; ① 取出 ArcInner 指针
@@ -102,6 +105,8 @@ LBB3_3:
 LBB3_4:
 	brk	#0x1             ; ⑦ ★ 溢出时真的执行 brk 指令
 ```
+
+</details>
 
 这段函数不只做 `Arc::clone`：它还读取 payload，并在返回前 drop 临时的 `b`。
 因此这里同时出现了递增、读取和递减路径。逐条读：

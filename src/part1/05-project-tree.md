@@ -89,6 +89,9 @@ pub struct RawNode {
 
 **arena 版本**（`arena_depth`，`-O`，共 **24** 条指令）：
 
+<details>
+<summary>展开汇编证据片段（可跳过）</summary>
+
 ```asm
 _arena_depth:
 	mov	x8, x1              ; id
@@ -106,6 +109,8 @@ LBB13_1:
 	tbnz	w11, #0, LBB13_1    ; Option 的 niche 判断
 	ret
 ```
+
+</details>
 
 **`madd`（multiply-add）是整段的核心**：arena 寻址就是一次乘法。
 没有引用计数、没有借用标志、没有 panic 路径、没有析构。

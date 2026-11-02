@@ -8,6 +8,10 @@
 
 ## 先把语法认清
 
+> 阅读卡片：前置第 4、18 章；建议分两次阅读。
+> 第一遍读 19.0、19.1、19.3 和小结，回答“固定哪一层、何时可以移动”。
+> 第二遍读 19.2 的指针构造与 Miri 证据，回答“地址没变为什么仍可能 UB”。
+
 `Pin<&mut T>` 或 `Pin<Box<T>>` 表示从安全代码不能再移动被指向的 `T`。
 若 `T: Unpin`，这个限制可以安全解除；`!Unpin` 类型则只能通过保证不移动
 字段的投影 API 修改。Pin 保证的是位置稳定性，不是只读，也不是对象地址永远
@@ -15,6 +19,8 @@
 
 仍然用搬运来记：`Pin<Box<T>>` 固定的是**货物**，不是装着地址的**提货单**。
 提货单可以移动，货物一旦进入地址敏感状态就必须留在原位。
+
+![Pin 固定值而不是指针句柄](../images/pin-layers.svg)
 
 ### 放到业务里：等待中的 IO Future
 
@@ -185,6 +191,9 @@ _read_self_ref:
 
 现在把 19.0 那个 `async fn` 的 MIR 打出来（`tools/evidence.sh ch19-pin`）：
 
+<details>
+<summary>展开MIR证据片段（可跳过）</summary>
+
 ```mir
 coroutine layout {
     field _s0: String;                  // ← 被借用的那个
@@ -199,6 +208,8 @@ coroutine layout {
     storage_conflicts = BitMatrix(3x3) { ... }
 }
 ```
+
+</details>
 
 ★ **`_s1: &String` 就是 19.2.1 里那个 `self_ref`。**
 

@@ -69,6 +69,9 @@ pub unsafe fn raw_double_add(a: *mut i32, b: *const i32) {
 
 实测（`aarch64-apple-darwin` / `rustc 1.99.0` / `-O` / `#[unsafe(no_mangle)]`）：
 
+<details>
+<summary>展开汇编证据片段（可跳过）</summary>
+
 ```asm
 _safe_double_add:                 ; 安全引用版本
 	ldr	w8, [x1]                  ; 读 *b
@@ -87,6 +90,8 @@ _raw_double_add:                  ; 裸指针版本
 	str	w8, [x0]
 	ret                               ; 总共 8 条指令
 ```
+
+</details>
 
 **这个裸指针版本生成了更多指令** —— 差在它多了一次内存读取。
 原因不是 `unsafe` 关键字，而是函数签名从引用改成裸指针后少了别名信息。
@@ -226,6 +231,9 @@ _two_shared:
 
 回到 24.0。把两个版本并排看：
 
+<details>
+<summary>展开LLVM IR证据片段（可跳过）</summary>
+
 ```llvm
 ; safe：a 带 noalias
 %x = load i32, ptr %b, align 4
@@ -243,6 +251,8 @@ store i32 %1, ptr %a
 %2 = add i32 %_4, %1
 store i32 %2, ptr %a
 ```
+
+</details>
 
 **LLVM 不是"不优化裸指针"，而是"没有依据去优化"。**
 `noalias` 是 Rust 送给 LLVM 的**信息**，裸指针不携带这个信息，

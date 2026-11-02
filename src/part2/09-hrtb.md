@@ -132,6 +132,9 @@ _0 = explicit::<for<'a> fn(&'a str) -> &'a str {id_str}>(id_str) -> [return: bb1
 
 HRTB 不只出现在函数 bound 上。实测（同一份 `.mir`）：
 
+<details>
+<summary>展开MIR证据片段（可跳过）</summary>
+
 ```mir
 ; 1) 函数 bound（省略写法）—— 同上
 _0 = elided::<for<'a> fn(&'a str) -> &'a str {id_str}>(id_str)
@@ -149,6 +152,8 @@ fn boxed_parser() -> Box<dyn for<'a> Fn(&'a str) -> &str> {
 ; 4) where 子句（`T: for<'a> Visitor<'a>`）
 fn total_visits(_1: &T) -> usize
 ```
+
+</details>
 
 ★ 第 2 条值得留意：**struct 字段里没有"省略规则"**——
 省略规则只作用于函数签名。但 `Parser<F: Fn(&str) -> &str>`

@@ -51,8 +51,7 @@ pub struct Point {
 ///     _4 = Counter::bump(move _5) -> ...;
 /// }
 /// ```
-/// **把 `let seen = *r;` 删掉，同一份代码就报 E0502** ——
-/// 变的是使用点的位置，不是词法作用域。
+/// 把 `let seen = *r;` 移到 `c.bump()` 后，就会报 E0502。
 pub fn nll_ok() -> u64 {
     let mut c = Counter { n: 0 };
     let r = &c.n; // 共享借用产生
@@ -75,8 +74,7 @@ impl Counter {
 /// `if` / `else` 两个分支都使用了 `first`，所以走到 `if` 之后，
 /// 没有任何路径还能到达使用点 → 借用已死 → `push` 合法。
 ///
-/// 对照（见 `fail/use_after_conflict.rs`）：**只在一个分支里**使用，
-/// 就会报 E0502 —— 因为"不走 if"那条路径仍然能到达使用点。
+/// 对照 `fail/use_after_conflict.rs`：冲突发生在条件使用之前，才会报 E0502。
 #[allow(clippy::if_same_then_else)]
 pub fn branch_all_use(flag: bool) -> usize {
     let mut v = vec![1u64, 2, 3];
@@ -88,4 +86,21 @@ pub fn branch_all_use(flag: bool) -> usize {
     }
     v.push(4); // ← 合法：两条路径都在上面用掉了借用
     v.len()
+}
+
+pub fn branch_one_use(flag: bool) -> usize {
+    let mut values = vec![1u64, 2, 3];
+    let first = &values[0];
+    if flag {
+        println!("{first}");
+    }
+    values.push(4);
+    values.len()
+}
+
+pub fn last_or_push(values: &mut Vec<String>) -> &String {
+    if values.is_empty() {
+        values.push(String::new());
+    }
+    values.last().unwrap()
 }

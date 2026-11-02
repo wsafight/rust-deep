@@ -129,6 +129,9 @@ pub fn mutex_accumulate(a: Arc<Mutex<u64>>, n: u64) -> u64 {
 
 **这是最贵的方案。** 每次迭代的汇编（`-O`）：
 
+<details>
+<summary>展开汇编证据片段（可跳过）</summary>
+
 ```asm
 LBB42_1:
 	subs	x20, x20, #1        ; 循环计数
@@ -149,6 +152,8 @@ LBB42_7:
 	...
 	bl	__RNv...Mutex6unlock  ; ★ 又要一次函数调用
 ```
+
+</details>
 
 **11 条指令 + 两次函数调用，只为做一次 `+1`。**
 

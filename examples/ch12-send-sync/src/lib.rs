@@ -203,3 +203,23 @@ pub fn arc_needs_both(a: std::sync::Arc<u64>) -> u64 {
     let h = std::thread::spawn(move || *b); // 移动 Arc（要 Send）
     h.join().unwrap() + *a // 共享 Arc（要 Sync）
 }
+
+pub fn call_twice<F: FnMut() -> usize>(mut callback: F) -> (usize, usize) {
+    (callback(), callback())
+}
+
+pub fn owned_reader(text: String) -> impl Fn() -> usize {
+    move || text.len()
+}
+
+pub fn counter() -> impl FnMut() -> usize {
+    let mut count = 0;
+    move || {
+        count += 1;
+        count
+    }
+}
+
+pub fn owned_once(text: String) -> impl FnOnce() -> String {
+    move || text
+}

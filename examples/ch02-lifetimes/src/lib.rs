@@ -12,7 +12,7 @@ pub fn longest<'a>(x: &'a str, y: &'a str) -> &'a str {
     if x.len() > y.len() { x } else { y }
 }
 
-/// 省略版本：编译成**完全相同**的代码 —— `'a` 不影响 codegen
+/// 历史命名：签名仍然显式标注生命周期，只用于验证相同实现被折叠。
 #[unsafe(no_mangle)]
 pub fn longest_elided<'a>(x: &'a str, y: &'a str) -> &'a str {
     if x.len() > y.len() { x } else { y }
@@ -71,4 +71,16 @@ pub fn precise<'a>(x: &'a str, _y: &str) -> &'a str {
 pub fn use_precise() -> &'static str {
     let local = String::from("temp");
     precise("static str", &local)
+}
+
+pub fn capture_all(_: &()) -> impl Sized {}
+
+pub fn capture_none(_: &()) -> impl Sized + use<> {}
+
+pub fn owned_length(input: &str) -> impl Copy + use<> {
+    input.len()
+}
+
+pub fn borrowed_chars<'a>(input: &'a str) -> impl Iterator<Item = char> + use<'a> {
+    input.chars()
 }

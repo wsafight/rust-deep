@@ -5,6 +5,14 @@
 
 ## 复现命令
 
+`tests/streams.rs` 验证容量为 1 的 channel 在消费前使第二次 send 保持 Pending，
+消费后允许完成；关闭生产者且排空后，ReceiverStream 返回 None。另验证直接
+fold 流，不为每项 spawn。
+
+```bash
+cargo test -p ch22-tokio --test streams --locked
+```
+
 ```bash
 # ★ 运行期演示
 cargo run -p ch22-tokio            # 预期输出：total = 4

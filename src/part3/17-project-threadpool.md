@@ -142,6 +142,9 @@ loop {
 
 MIR 里可以看到正确的写法（worker 闭包的 bb2–bb10）：
 
+<details>
+<summary>展开MIR证据片段（可跳过）</summary>
+
 ```mir
 bb2: {
     _4 = std::sync::Mutex::<...Receiver<Box<dyn FnOnce() + Send>>>::lock(copy _5) -> [return: bb3, unwind: bb13];
@@ -158,6 +161,8 @@ bb10: {
     //   ^^^^ call_once 在 drop(_3) **之后** —— 任务在锁外执行
 }
 ```
+
+</details>
 
 **`drop(_3)` 在 `call_once` 之前** —— 这就是"锁只覆盖 `recv`"的机器证据。
 
@@ -181,6 +186,9 @@ bb10: {
 
 MIR 里逐字可见：
 
+<details>
+<summary>展开MIR证据片段（可跳过）</summary>
+
 ```mir
 bb0: {
     _4 = &mut ((*_1).1: Option<Sender<Box<dyn FnOnce() + Send>>>);
@@ -194,6 +202,8 @@ bb2: {
     _5 = <&mut Vec<Worker> as IntoIterator>::into_iter(move _6) -> [return: bb3, unwind continue];
 }
 ```
+
+</details>
 
 **`take` → `drop` → 然后才遍历 workers。** 顺序在 MIR 里是**控制流**上的先后。
 

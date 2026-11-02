@@ -211,9 +211,8 @@ bb0: {
 }
 ```
 
-把 `let seen = *r;` 这一行**删掉**，同一份代码立刻报 E0502 ——
-因为 ② 消失了，`_2` 的最后使用点变成了后面某处（或者根本没有），
-存活区间直接盖住了 ③。
+把 `let seen = *r;` 移到 `c.bump()` 后面，就会报 E0502：共享借用在可变借用之后
+仍被读取。若只是删掉读取并同步删掉对 `seen` 的使用，借用反而可能更早结束。
 
 **变的只是使用点的位置。词法作用域一点没动。**
 这是 NLL 最干净的一个演示。
@@ -255,10 +254,12 @@ ls: out.mir: No such file or directory
 > 对控制流图上的每个点，算出"此刻哪些借用还活着"。
 > 活着的判据是：从这个点出发，**存在一条路径**能走到该借用的某个使用点。
 
-这个定义有两个直接后果：
+这是一条理解普通局部借用的简化规则，不是完整的借用检查算法。返回引用、
+析构器和跨函数签名还会引入额外约束，不能只按文本上的最后一行使用判断。
 
-**（1）它必须保守。** 只要**存在**一条路径还能用到这个借用，就算它活着。
-看这组对照（都实测过）：
+![借用在条件分支汇合后结束，再修改容器](../images/borrow-flow.svg)
+
+先看两个都能通过的分支例子：
 
 ```rust
 // 编译过：if/else 两个分支里都用掉了借用，
@@ -271,35 +272,31 @@ pub fn ok(flag: bool) -> usize {
     v.len()
 }
 
-// 报 E0502：只有一个分支用借用，
-// 于是"不走进 if"这条路径仍然能到达使用点
-pub fn err(flag: bool) -> usize {
+pub fn one_branch(flag: bool) -> usize {
     let mut v = vec![1u64, 2, 3];
     let first = &v[0];
     if flag { println!("{first}"); }
-    v.push(4);            // error[E0502]
+    v.push(4);
     v.len()
 }
 ```
 
-**（2）它不做常量传播。** 把 `flag` 换成字面量 `false`，照样报错：
+只有一个分支使用引用，不会让引用自动活到整个作用域末尾。两个函数的 `push`
+都发生在条件使用之后；所有能够到达 `push` 的路径都不再读取 `first`。
+反例 `fail/use_after_conflict.rs` 的真正差别是把 `push` 放在 `if` 前面：
 
-```rust
-pub fn still_err() -> usize {
+```rust,compile_fail,E0502
+pub fn use_after_conflict(flag: bool) -> usize {
     let mut v = vec![1u64, 2, 3];
     let first = &v[0];
-    if false { println!("{first}"); }   // 恒不执行，但借用检查器不管
-    v.push(4);            // error[E0502]
+    v.push(4);
+    if flag { println!("{first}"); }
     v.len()
 }
 ```
 
-编译器**有能力**知道 `if false` 走不到，但它不用这个信息来判断借用的死活——
-那是**优化**，不是**健全性**。健全性检查必须在任何程序上都给出一致答案，
-不能依赖"这个分支实际会不会走"。
-
-**（3）它只看"使用"，不看"是否读到了值"。** 这一条带来两个反直觉的推论，
-下一节展开。
+这里确实存在一条路径，在 `push` 之后仍使用旧引用。Vec 可能扩容，引用可能
+失效，所以拒绝有直接的安全理由；不是因为有一个分支没有使用引用。
 
 ## 1.4 反直觉的点
 
@@ -308,23 +305,23 @@ pub fn still_err() -> usize {
 ```rust
 let mut v = vec![1, 2, 3];
 let first = &v[0];
-let _ = first;        // ← 看着"没用"，但它是一次使用
-v.push(4);            // OK：first 的最后使用点在上一行
+println!("{first}");
+v.push(4);
 ```
 
-把 `let _ = first;` 删掉，`first` 就再没有使用点了 —— 于是
-"存活区间"变成空集，代码**照样**编译过（甚至更宽松）。
+这里最后一次读取引用发生在 `push` 之前，所以可以通过。
 
 反过来，如果你写：
 
-```rust,ignore
+```rust,compile_fail,E0502
 let mut v = vec![1, 2, 3];
 let first = &v[0];
-v.push(4);            // error[E0502]
-let _ = first;        // ← 这一行把使用点挪到了冲突之后
+v.push(4);
+println!("{first}");
 ```
 
-冲突就出现了。**同样的三行代码，`let _ = ...` 放前放后，结果相反。**
+冲突就出现了。不要用 `let _ = first` 替代这个读取：通配模式不会绑定、移动
+或读取这个引用值，放在 `push` 后面也不会产生同样的借用冲突。
 
 **实践含义**：被 E0502 卡住时，调**作用域**通常没用，
 调**使用点的位置**才有用。（当然，正确做法是先想清楚这段代码
@@ -353,24 +350,37 @@ _5 = &mut _1;    // 可变借用
 
 ### 反直觉之三：被拒绝的代码不一定"真的有问题"
 
-```rust
-pub fn still_err() -> usize {
-    let mut v = vec![1u64, 2, 3];
-    let first = &v[0];
-    if false { println!("{first}"); }   // 恒不执行
-    v.push(4);            // error[E0502]
-    v.len()
+在 Rust 1.99.0 / Edition 2024 上，下面这个经典例子仍被拒绝：
+
+```rust,compile_fail,E0502
+pub fn last_or_push(values: &mut Vec<String>) -> &String {
+    if let Some(last) = values.last() {
+        return last;
+    }
+    values.push(String::new());
+    values.last().unwrap()
 }
 ```
 
-这不是借用检查器"不够聪明"，而是**健全性检查与优化必须是两件事**。
-优化可以保守也可以激进（错了只是慢）；健全性检查一旦激进（错了就是 UB）。
+从控制流看，有元素就返回、没有元素才 push，两条路径不需要同时持有引用。
+但返回值的生命周期约束使当前分析不能把这两条路径完全分离，`push` 仍报 E0502。
+这类条件返回借用的精度问题是 Polonius 研究的典型动机之一；这里不依赖其
+开发状态，只把当前 stable 的诊断固化为反例 `fail/conditional_return.rs`。
 
-> 顺带一个**实测**得到的细节：`if flag { ... }` 与
-> `if flag { ... } else { ... }`（两个分支都用借用）结果相反——
-> 后者编译过。因为所有出口都已经用过借用了，`if` 之后没有路径能到达使用点。
-> 借用检查器确实是**路径敏感**的，只是它数的是"可达性"，
-> 而不是"实际会不会执行"。
+不必用 `unsafe` 绕过它。先只检查是否为空，把返回借用推迟到最后即可：
+
+```rust
+pub fn last_or_push(values: &mut Vec<String>) -> &String {
+    if values.is_empty() {
+        values.push(String::new());
+    }
+    values.last().unwrap()
+}
+```
+
+可迁移的判断规则是：若某个分支提前返回借用，后面还要修改同一个对象，先尝试
+把“决定是否修改”和“最终借出引用”分成两个阶段。拒绝不一定意味着代码必然
+不安全，但接受一个改写也不能反过来证明所有类似程序都安全。
 
 ## 1.5 亲手验证
 
@@ -399,7 +409,8 @@ rustc --edition 2024 --crate-type=lib examples/ch01-borrow/fail/E0502.rs
 这三条都写成了自动断言：
 
 ```bash
-scripts/verify-evidence.sh ch01      # 5 条断言
+cargo test -p ch01-borrow
+scripts/verify-evidence.sh ch01
 ```
 
 ## 1.6 与 unsafe 的关系

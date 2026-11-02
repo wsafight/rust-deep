@@ -6,7 +6,7 @@
 
 ```bash
 tools/evidence.sh ch02-lifetimes
-scripts/verify-evidence.sh ch02      # 8 条断言
+scripts/verify-evidence.sh ch02
 ```
 
 ## ★ 核心证据：生命周期在 codegen 里**完全不存在**
@@ -37,7 +37,7 @@ _without_lifetime = _with_lifetime
 - 所以"生命周期有运行时开销"这个担心是**范畴错误** ——
   它不是"开销小"，是**根本不参与运行时**。
 
-## ★ 第二组：显式标注 vs 省略，生成同一个函数
+## 第二组：相同签名函数折叠，不是省略规则证据
 
 ```rust
 pub fn longest<'a>(x: &'a str, y: &'a str) -> &'a str { ... }
@@ -60,6 +60,10 @@ _longest:
 
 **`'a` 只影响"能不能编译"，不影响"编译出什么"。**
 
+`longest_elided` 是历史命名：这里两个签名都显式写了 `'a`。alias 证明的是
+相同实现被去重，不能据此声称两个输入借用可以省略输出关系。生命周期显式 /
+省略的有效对照是第一组 `with_lifetime` 与 `without_lifetime`。
+
 ## ★ 第四组：过度标注反而编译不过
 
 ```rust
@@ -79,7 +83,25 @@ fn precise<'a>(x: &'a str, _y: &str) -> &'a str { x }      // 只有输出跟 x 
 
 **教训**：标注写得越紧，求解空间越小。省略规则给的通常是最宽松的。
 
-## 四个反例：错误信息的措辞就是本章的论点
+## Edition 2024 的 RPIT 精确捕获
+
+`capture_all(&()) -> impl Sized` 的返回类型默认捕获输入的匿名生命周期；
+`capture_none(&()) -> impl Sized + use<>` 则显式排除它。
+
+| 样本 | Rust 1.99.0 的结果 |
+|---|---|
+| `fail/rpit_overcapture.rs` | `lifetime may not live long enough`，不能承诺 `'static` |
+| `fail/rpit_missing_capture.rs` | E0700，实际借用输入却没有允许捕获其生命周期 |
+| `tests/capture.rs` | 空捕获可脱离输入；`use<'a>` 保留借用 iterator 的约束 |
+
+```bash
+cargo test -p ch02-lifetimes
+scripts/verify-evidence.sh ch02
+```
+
+这些证据检验类型契约，不依赖 MIR 的形状或汇编指令。
+
+## 生命周期标注反例：错误信息的措辞就是本章的论点
 
 ### 1. `fail/missing_lifetime.rs` —— E0106
 
@@ -159,6 +181,6 @@ error[E0515]: cannot return value referencing local variable `local`
 
 ## 待办
 
-- [x] 断言 8 条全绿
+- [x] 生命周期标注与 RPIT 捕获反例进入自动断言
 - [ ] 第 3 章：建 `ch03-variance` example，用编译期对照演示协变/不变/逆变
 - [ ] 第 4 章（自引用与 Pin 的前置知识）需要新 example

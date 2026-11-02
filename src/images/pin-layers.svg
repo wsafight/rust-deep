@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 250" role="img" aria-labelledby="title desc">
+  <title id="title">Pin 固定的是值，不是指针句柄</title>
+  <desc id="desc">Pin Box 句柄可以转移，地址敏感的 T 保持原位直到析构。Unpin 类型可解除限制。</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#334155"/></marker></defs>
+  <rect width="820" height="250" rx="12" fill="#f1f5f9"/>
+  <g font-family="sans-serif" font-size="18" fill="#0f172a" text-anchor="middle">
+    <rect x="35" y="50" width="270" height="100" rx="8" fill="#dbeafe" stroke="#2563eb"/><text x="170" y="88">Pin&lt;Box&lt;T&gt;&gt;</text><text x="170" y="122" font-size="16">句柄可以 move 到另一个容器</text>
+    <rect x="480" y="50" width="305" height="100" rx="8" fill="#dcfce7" stroke="#15803d"/><text x="632" y="88">地址敏感的 !Unpin T</text><text x="632" y="122" font-size="16">保持地址有效，直到原位析构</text>
+    <text x="410" y="198" font-size="16">移动“提货单”不等于搬走“货物”</text><text x="410" y="228" font-size="14">T: Unpin 时，可以通过安全 API 解除移动限制</text>
+  </g>
+  <path d="M305 100H475" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>

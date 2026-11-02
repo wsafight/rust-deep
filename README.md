@@ -4,12 +4,22 @@
 
 ## 这是什么
 
-一本 mdBook 写的书。与"再讲一遍官方书"不同，本书的每个结论都落到
-**可复现的证据链**：
+写给已经能写 Rust、但仍在借用、trait 组合和异步边界上反复卡住的读者。
+30 章主体、一个证据阅读入门章和 4 个附录，从最小反例走向线程池、
+mini runtime 与安全 ArrayVec。不是语法大全，也不要求你先会看汇编。
+
+- 从这里开始：[前言与阅读路线](src/preface.md)、[读懂 MIR 与汇编](src/00-reading-evidence.md)。
+- 三个样章：[借用检查器](src/part1/01-borrow-checker.md)、[取消安全](src/part6/28-cancellation-safety.md)、[ArrayVec 安全审计](src/part6/30-project-arrayvec.md)。
+- 本地阅读：安装 mdBook 后运行 `mdbook serve --open`；验证命令见下文。
+
+本书特点是**可复现的证据链**，但不同证据回答不同问题：
 
 ```
 源码 → MIR → LLVM IR → 汇编 → 运行时可观察产物
 ```
+
+汇编只支持当前样本的代码生成结论；Miri 不替代不变式论证，Loom 只检验
+构造出的有界模型。详见[证据的边界](src/appendix/d-verification.md)。
 
 ## 快速开始
 
@@ -24,7 +34,7 @@ scripts/verify-all.sh
 scripts/verify-portable.sh
 scripts/verify-evidence.sh ch07
 
-# Miri 验证（9 个测试目标 + 前置检查，需要 nightly；与 stable 验证分开）
+# Miri 验证（10 个测试目标 + 前置检查，需要 nightly；与 stable 验证分开）
 scripts/verify-miri.sh
 
 # 安装并启用本地 pre-commit 检查
@@ -38,7 +48,7 @@ python3 -m pre_commit run --all-files
 | 路径 | 作用 |
 |---|---|
 | `src/` | mdBook 正文（唯一的书稿来源） |
-| `examples/` | 每章一个独立 crate，承载书中所有可运行示例 |
+| `examples/` | 31 个独立 crate；第 5 章含两个对照样本 |
 | `examples/*/src/lib.rs` | 该章的正例（可编译） |
 | `examples/*/fail/*.rs` | 该章的**反例**（故意编译不过，不参与构建） |
 | `examples/*/tests/*.rs` | 集成测试与 Miri 用例（UB 用例用 `#![cfg(miri)]` 包住） |
@@ -80,6 +90,11 @@ tools/evidence.sh ch16-atomics x86_64-apple-darwin
   Rust 1.99.0 / AArch64 macOS 证据。未安装的可选 x86_64 对照目标会标为 `SKIP`。
 - GitHub Actions 在 pull request 上运行跨平台检查、证据链和 Miri；三者通过后
   `main` 分支才会部署到 Pages。
+- 第 16 章 Loom 正反模型进入跨平台测试；第 30 章 panic guard、Clone 与
+  iterator 测试进入 Miri，并有“先发布长度”的预期 UB 探针。
+- 跨平台质量检查在 Ubuntu 与 macOS 上运行，包含 Stream 背压测试与原生
+  C ABI 集成探针；固定平台汇编断言仍单独运行。
+- 本轮改造范围与取舍见 [改造记录](docs/improvements.md)。
 - 已固化证据的 example（含断言）：
 
   | example | 内容 | 章 |
@@ -111,4 +126,4 @@ tools/evidence.sh ch16-atomics x86_64-apple-darwin
   | `ch29-layout-validity` | 布局 / niche / `MaybeUninit` / 有效值 | 29 |
   | `ch30-arrayvec` | 初始化前缀 / 移动 / 析构责任（**Miri 用例**） | 30 |
 
-- 正文进度：**全书 30 章 + 4 个附录已完成**
+- 正文范围：**第 0 章入门 + 30 章主体 + 4 个附录**；持续迭代阅读体验与验证覆盖。

@@ -112,8 +112,13 @@ fn two_awaits(_1: u64, _2: u64) -> {async fn body of two_awaits()} {
 
 ### 18.2.2 状态机的布局：挂起点落进不同状态
 
+![Future 的挂起状态与存活字段示意；不是 ABI 布局](../images/future-states.svg)
+
 同一个 MIR 文件里，状态机的 `poll` 实现（`two_awaits::{closure#0}`）
 开头就有完整的布局：
+
+<details>
+<summary>展开MIR证据片段（可跳过）</summary>
 
 ```mir
 fn two_awaits::{closure#0}(_1: Pin<&mut {async fn body of two_awaits()}>, _2: &mut Context<'_>) -> Poll<u64> {
@@ -132,6 +137,8 @@ fn two_awaits::{closure#0}(_1: Pin<&mut {async fn body of two_awaits()}>, _2: &m
         storage_conflicts = BitMatrix(4x4) { ... }
     }
 ```
+
+</details>
 
 **逐行读**：
 

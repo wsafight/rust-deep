@@ -1,6 +1,6 @@
 [book]
 title = "Rust 深水区"
-description = "Rust 1.99 里那些真正卡人的地方：所有权、Trait、并发、异步与 unsafe"
+description = "Rust 1.99 里那些真正卡人的地方：所有权、Trait、并发、异步、unsafe 与资源语义"
 authors = ["jump-and-jump"]
 language = "zh-CN"
 src = "src"
@@ -8,6 +8,9 @@ src = "src"
 [build]
 build-dir = "book"
 create-missing = true
+
+[rust]
+edition = "2024"
 
 [output.html]
 default-theme = "navy"

@@ -131,6 +131,9 @@ pub async fn borrow_not_across_await() -> u64 {
 
 MIR 里的状态机布局（`tools/evidence.sh ch20-async-lifetimes`）：
 
+<details>
+<summary>展开MIR证据片段（可跳过）</summary>
+
 ```mir
 // A: borrow_across_await
 coroutine layout {
@@ -148,6 +151,8 @@ coroutine layout {
     variant_fields = { ..., Suspend0 (3): [_s0, _s1, _s2] }
 }
 ```
+
+</details>
 
 ★ **两份代码只差 `r.len()` 的位置，状态机的字段类型就从 `&String` 变成了 `usize`。**
 

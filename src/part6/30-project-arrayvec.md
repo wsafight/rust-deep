@@ -180,6 +180,61 @@ IntoIter owns [next..end)
 本章测试覆盖这三类。不要用“指针地址不同”来表示 ZST 元素是否存在，应始终以
 `len` 和索引范围作为所有权账本。
 
+### 30.9.1 `clone`、`try_extend`：先完成用户代码，再发布长度
+
+`T::clone` 和 iterator 的 `next` 都可能执行任意用户代码，也都可能 panic。
+本章实现遵循同一条顺序：先生成一个完整的 T，再交给 `try_push`。`Clone`
+构造中的新容器本身就是 guard；第 k 个元素克隆失败时，只析构前 k−1 个
+成功克隆的值，源容器的长度和元素所有权不变。T 的内部可变性或其他用户代码
+副作用不在回滚承诺之内。
+
+`try_extend` 的保证更弱：失败前已插入的元素保留，不回滚整个批次。容量不足时
+返回第一个放不下的值，本次调用拥有的 iterator 值被正常丢弃；若传入的是
+`&mut iterator`，原 iterator 的剩余项仍可由调用方继续读取。iterator panic 时仍保留已经
+插入的有效前缀。“保持有效”与“全部成功或全部撤销”是两种不同的 panic 保证。
+
+### 30.9.2 `retain_mut`：有洞时，len 不能独自描述所有权
+
+在原地过滤中，删除一个元素会留下洞，后面的用户 predicate 又可能 panic。
+实现不能继续声称 `data[..old_len]` 都有效，也不能让普通 `ArrayVec::drop`
+访问这个有洞的区间。`RetainGuard` 暂时把公开的 len 设为 0，并接管账本：
+
+```text
+[0 .. processed-deleted)     已压紧、仍被拥有的保留元素
+[processed-deleted .. processed)  洞或失去所有权的残留字节
+[processed .. original_len)  尚未处理、仍被拥有的元素
+```
+
+逐个审计实现中的 unsafe：
+
+1. `processed < original_len <= N`，当前指针始终指向未处理的有效 T；
+2. predicate 只获得当前元素的独占引用，不能同时访问容器；
+3. 保留元素只向更低索引移动，目标位于洞中；使用 `ptr::copy` 也适用于 ZST；
+4. 删除时先增加 processed 和 deleted，再调用 `drop_in_place`。即使 T 的析构器
+   panic，guard 也不会再把这个元素纳入清理区间；
+5. guard 的 Drop 将未处理后缀整体搬到洞的左端，再发布
+   `len = original_len - deleted`。搬移和记账都不调用用户代码。
+
+predicate panic 时，当前元素仍属于未处理后缀；其修改会保留，不承诺逻辑回滚。
+析构器 panic 时，已经开始析构的元素被排除，后缀仍恢复成连续有效前缀。
+这就是 guard 的职责：恢复安全不变式，不猜测业务操作应该如何撤销。
+
+### 30.9.3 反向探针、drop check 与泄漏
+
+`tests/arrayvec_ub.rs` 故意先递增长度、再调用构造函数。构造函数 panic 后，
+析构器按错误长度读取未初始化槽位，Miri 必须报 UB；这个目标只在 `cfg(miri)`
+下启用，绝不在普通硬件上执行。正例同时覆盖 predicate、Clone、iterator 和
+元素析构器各自 panic 的路径。
+
+这个内联存储的容器通过 `[MaybeUninit<T>; N]` 表达拥有 T，不需要额外增加
+`PhantomData<T>`。正常的 drop check 约束仍然适用，元素借用的值必须在元素
+析构时有效。`#[may_dangle]` 不是实现这个容器的前提，也不能用它消除真实的
+悬垂访问；本章不依赖这种不稳定的库实现机制。
+
+如果调用方 `mem::forget` 按值 iterator，尚未消费的元素不会析构。容器已经把
+所有权交给 iterator，也不会再访问它们，因此允许泄漏但不允许 UB。测试使用
+带析构计数的 ZST 验证这个边界，不额外制造堆分配泄漏来干扰 Miri 门禁。
+
 ## 30.10 亲手验证
 
 ```bash
@@ -203,4 +258,5 @@ scripts/verify-miri.sh
 - `MaybeUninit` 后缀可以有任意字节，但绝不能当作 T 读取或析构；
 - 移动后残留的字节不再代表一个被拥有的值；
 - 按值 iterator 必须从容器接管未消费元素的析构责任；
+- 跨用户回调维护有洞的内存时，用 guard 记录区域所有权并在 unwind 时恢复前缀；
 - Miri 是路径级检查，不替代对所有泛型参数和控制流的不变式论证。

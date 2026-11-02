@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 270" role="img" aria-labelledby="title desc">
+  <title id="title">Future 在挂起状态保存跨 await 数据</title>
+  <desc id="desc">未开始的 Future 在 poll 后进入不同挂起状态，分别保存活跃字段与子 Future，最终返回 Ready。图示不承诺 ABI 布局。</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#334155"/></marker></defs>
+  <rect width="820" height="270" rx="12" fill="#f1f5f9"/>
+  <g font-family="sans-serif" font-size="17" fill="#0f172a" text-anchor="middle">
+    <rect x="20" y="75" width="145" height="90" rx="8" fill="#e2e8f0" stroke="#64748b"/><text x="92" y="112">Unresumed</text><text x="92" y="143" font-size="14">保存输入参数</text>
+    <rect x="220" y="75" width="185" height="90" rx="8" fill="#dbeafe" stroke="#2563eb"/><text x="312" y="112">Suspend0</text><text x="312" y="143" font-size="14">活跃数据 + 子 future</text>
+    <rect x="460" y="75" width="185" height="90" rx="8" fill="#dbeafe" stroke="#2563eb"/><text x="552" y="112">Suspend1</text><text x="552" y="143" font-size="14">另一组活跃字段</text>
+    <rect x="700" y="75" width="100" height="90" rx="8" fill="#dcfce7" stroke="#15803d"/><text x="750" y="112">Returned</text><text x="750" y="143" font-size="14">Ready</text>
+    <text x="410" y="210" font-size="15">再次 poll 从挂起状态继续；Ready 可以直接跳过挂起</text><text x="410" y="240" font-size="14">示意存活关系，不承诺字段偏移、状态编号或固定 ABI</text>
+  </g>
+  <g stroke="#334155" stroke-width="2" marker-end="url(#arrow)"><path d="M165 120H215"/><path d="M405 120H455"/><path d="M645 120H695"/></g>
+</svg>

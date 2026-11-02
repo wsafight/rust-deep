@@ -179,6 +179,42 @@ fn count_ref(header: &Header) -> &u32 {
 这再次说明检查工具是互补的。Miri 只检查实际走到的路径；没有报错不能推广为对
 所有输入都 sound。
 
+### 29.7.1 从布局到系统边界：让 C 真正调用 Rust
+
+`repr(C)` 约束数据布局，不自动指定函数 ABI。一个 C 接口还需规定符号名、
+调用约定、有效值和错误表达。`src/ffi.rs` 提供完整最小接口：
+
+```rust,ignore
+#[repr(C)]
+pub struct AddResult {
+    pub value: i32,
+    pub status: u8,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_deep_checked_add(left: i32, right: i32) -> AddResult {
+    match left.checked_add(right) {
+        Some(value) => AddResult { value, status: 0 },
+        None => AddResult { value: 0, status: 1 },
+    }
+}
+```
+
+加法溢出返回状态 1，不把 panic 作为跨语言错误协议。接口使用固定宽度整数，
+不返回 String、Vec、引用或 trait object，也不假装一次 null 检查就能证明任意
+外部指针可安全访问。
+
+```bash
+bash examples/ch29-layout-validity/c-ffi/run.sh
+```
+
+脚本把 `src/ffi.rs` 编译为 native staticlib，再用系统 C 编译器构建并运行调用方。
+C 与 Rust 各自验证偏移和大小，并实际调用正常 / 溢出路径；不比较 padding。
+探针进入跨平台门禁，在 Linux / macOS 原生运行，不只是生成交叉目标文件。
+
+指针接口还必须规定长度、对齐、生命周期、可变性与释放责任；允许 unwind 的
+ABI 也必须双方明确约定。`extern "C"` 本身不会验证这些条件。
+
 ## 29.8 亲手验证
 
 ```bash

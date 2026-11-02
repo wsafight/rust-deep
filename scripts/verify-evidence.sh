@@ -167,14 +167,19 @@ assert_contains ch01-borrow ".mir" '_5 = &mut _1'        "共享借用死后的�
 assert_contains ch01-borrow ".mir" 'Vec::<u64>::push'    "branch_all_use：两个分支用掉借用后 push 合法"
 assert_fails ch01-borrow "fail/E0502.rs" 'E0502' "反例必须报 E0502（借用冲突）"
 assert_fails ch01-borrow "fail/use_after_conflict.rs" 'E0502' "反例：使用点在冲突之后也报 E0502"
+assert_fails ch01-borrow "fail/conditional_return.rs" 'E0502' "条件返回借用仍有 NLL 分析边界"
 
 # ---- ch02: 生命周期是约束，不是时间 ----
 assert_contains ch02-lifetimes ".O3.ll" '^@without_lifetime = .*alias .*ptr @with_lifetime' "生命周期完全擦除：两个函数被折叠成 alias"
-assert_contains ch02-lifetimes ".O3.ll" '^@longest_elided = .*alias .*ptr @longest'        "显式标注与省略版本生成同一个函数"
+assert_contains ch02-lifetimes ".O3.ll" '^@longest_elided = .*alias .*ptr @longest'        "相同签名与实现的历史对照被折叠为 alias"
 assert_fails ch02-lifetimes "fail/missing_lifetime.rs"  'E0106' "缺少生命周期标注报 E0106"
 assert_fails ch02-lifetimes "fail/elision_ambiguous.rs" 'lifetime may not live long enough' "省略规则不够时报错"
 assert_fails ch02-lifetimes "fail/outlives.rs"          'lifetime may not live long enough' "返回值生命周期超出输入范围"
 assert_fails ch02-lifetimes "fail/over_annotated.rs"    'E0515' "过度标注生命周期反而编译不过"
+assert_fails ch02-lifetimes "fail/rpit_overcapture.rs" 'lifetime may not live long enough' "Edition 2024 的 RPIT 默认捕获输入生命周期"
+assert_fails ch02-lifetimes "fail/rpit_missing_capture.rs" 'E0700' "use<> 不能隐藏实际依赖输入的借用"
+assert_fails ch07-vtable "fail/downcast_trait.rs" 'E0308' "supertrait 对象不能自动恢复成 subtrait 对象"
+assert_fails ch11-project-abstract "fail/error_not_send_sync.rs" 'E0277' "Box<dyn Error> 不能通过问号自动补出 Send/Sync"
 
 # ---- ch03: variance —— 只有"能编译/不能编译"这一种证据 ----
 # ⚠️ variance 没有可用的 dump 工具（见 evidence.md），也不产生代码。
@@ -402,6 +407,8 @@ assert_contains ch12-send-sync ".O3.s" '^_spawn_handle_field:' "精确捕获：�
 # ★ Sync 和 Send 是两个独立性质：MutexGuard 是 Sync 但 !Send
 assert_contains ch12-send-sync ".O3.s" '^_guard_is_sync:' "MutexGuard 是 Sync（&MutexGuard 可以跨线程）"
 assert_fails ch12-send-sync "fail/guard_not_send.rs" 'MutexGuard.*cannot be sent between threads safely' "MutexGuard 不是 Send（解锁必须在加锁的线程）"
+assert_fails ch12-send-sync "fail/fnmut_as_fn.rs" 'E0594' "修改捕获状态的闭包不能满足 Fn"
+assert_fails ch12-send-sync "fail/fnonce_as_fnmut.rs" 'E0507' "移出非 Copy 捕获值的闭包不能满足 FnMut"
 
 # ---- ch13: Arc 的原子操作 + Mutex 的平台差异 ----
 assert_contains ch13-arc-mutex ".O3.s" 'ldadd'   "Arc::clone 使用 ldadd 原子加"
@@ -524,6 +531,7 @@ assert_fails ch27-drop "fail/dropck.rs" 'E0597' "drop check：析构时借用必
 # 跨 await 的 guard 是状态机字段；future 被取消时，coroutine drop glue 会清理它。
 assert_contains ch28-cancellation ".mir" 'field _s1: DropSignal;' "跨 await 的 guard 被保存为 future 字段"
 assert_contains ch28-cancellation ".mir" 'drop\(.*DropSignal' "状态机的完成/cleanup 路径析构 guard"
+assert_fails ch28-cancellation "fail/await_in_drop.rs" 'E0728' "同步的 Drop::drop 不能 await 异步清理"
 # 先修改再 await：已取出的 item 必须跨挂起点存进状态机。
 assert_adjacent ch28-cancellation ".mir" 'field _s2: u64;' 'field _s3: std::future::Pending' "先 pop 再 await：item 跨挂起点存活"
 # 先 await 再提交：挂起状态不保存 item。

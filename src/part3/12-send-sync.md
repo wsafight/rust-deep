@@ -86,6 +86,47 @@ let h = std::thread::spawn(move || c.get());     // ✅ Cell 是 Send！
 **同一个 `Cell`，一次说"不能跨线程"，一次又能跨线程。**
 这一章要把这个不对称说清楚。
 
+### 12.0.1 先分开三个问题：怎么捕获、怎么调用、能否跨线程
+
+闭包的捕获方式与调用 trait 不能混为一谈：
+
+| 问题 | 决定因素 |
+|---|---|
+| 捕获共享引用、独占引用还是值 | 闭包体如何使用变量；`move` 强制按值捕获 |
+| 实现 `Fn`、`FnMut` 还是只有 `FnOnce` | 每次调用是否修改或移出捕获状态 |
+| 闭包是不是 `Send` | 实际捕获的字段及其捕获方式 |
+
+所有闭包都实现 `FnOnce`；能用 `&mut self` 调用的还实现 `FnMut`；能用 `&self`
+调用的还实现 `Fn`。接收参数时，`FnOnce` 是要求最少的接口，不是“只能接受会
+销毁状态的闭包”。
+
+```rust
+fn call_twice(mut callback: impl FnMut() -> usize) -> (usize, usize) {
+    (callback(), callback())
+}
+
+let text = String::from("Rust");
+let reader = move || text.len();
+assert_eq!(call_twice(&reader), (4, 4));
+assert_eq!(reader(), 4);
+
+let mut count = 0;
+let counter = move || {
+    count += 1;
+    count
+};
+assert_eq!(call_twice(counter), (1, 2));
+```
+
+`reader` 虽然是 `move` 闭包，每次调用只读取拥有的 String，所以仍实现 `Fn`。
+`counter` 修改状态，需要 `FnMut`。若闭包写成 `move || text`，每次调用会移出
+非 Copy 的 String，则只有 `FnOnce`，不能交给需要重复调用的接口。
+
+此外，`move` 也不保证 `'static`：把一个 `&'a T` 按值捕获，只是移动引用本身，
+并没有获得 T 的所有权。闭包仍受 `'a` 约束。Edition 2021 起的分字段捕获
+则决定究竟哪个字段参与检查，见 12.2.5；它与第 2 章的 RPIT `use<..>` 是
+两种不同的“精确捕获”，不要相互套用。
+
 ## 12.1 先把常见说法摆上桌
 
 通常会这样概括：
@@ -259,7 +300,7 @@ error[E0277]: `Cell<u64>` cannot be shared between threads safely
 
 这是本章最值钱的一段。
 
-```rust
+```rust,compile_fail,E0277
 pub struct MyBox(pub *mut u64);
 unsafe impl Send for MyBox {}      // ← 标在 MyBox 上
 
@@ -476,6 +517,7 @@ PhantomData<&'a T>         // → 跟随 T
 
 ```bash
 tools/evidence.sh ch12-send-sync
+cargo test -p ch12-send-sync
 scripts/verify-evidence.sh ch12
 
 # ★ 汇编里没有"检查 Send"的代码（命中的全在符号名里）
@@ -504,7 +546,7 @@ done
    —— 这一对就是"`Sync` 与 `Send` 互相独立"的全部证据。
 
 ```bash
-scripts/verify-evidence.sh ch12      # 9 条断言
+scripts/verify-evidence.sh ch12
 ```
 
 ## 12.6 与 unsafe 的关系
