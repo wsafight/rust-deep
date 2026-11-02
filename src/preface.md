@@ -2,6 +2,40 @@
 
 > 官方书教你写 Rust；这本书教你别被 Rust 卡住。
 
+<div class="reading-intro">
+  <span class="reading-kicker">RUST 1.99 · EDITION 2024</span>
+  <p class="reading-lead">不只让代码编译通过，<br>更要知道它为什么成立。</p>
+  <p class="reading-description">30 章，从最小反例走向安全抽象。先建立心智模型，再沿源码、MIR 与运行时证据验证你的判断。</p>
+  <a class="reading-start" href="./00-reading-evidence.md">从证据阅读入门 <span aria-hidden="true">→</span></a>
+</div>
+
+<nav class="reading-paths" aria-label="按问题开始阅读">
+  <a class="reading-path" href="./part1/01-borrow-checker.md">
+    <span class="path-category">所有权与借用</span>
+    <strong>这段借用为什么过不了？</strong>
+    <span class="path-description">从引用的最后一次使用，理解编译器究竟在保护什么。</span>
+    <span class="path-chapter">第 1 章 · 借用检查器 <span aria-hidden="true">→</span></span>
+  </a>
+  <a class="reading-path" href="./part4/19-pin-unpin.md">
+    <span class="path-category">异步与地址稳定性</span>
+    <strong>Pin 到底固定了什么？</strong>
+    <span class="path-description">分清指针句柄与被指向的值，再看 Future 为什么不能随意移动。</span>
+    <span class="path-chapter">第 19 章 · Pin 与 Unpin <span aria-hidden="true">→</span></span>
+  </a>
+  <a class="reading-path" href="./part5/24-unsafe-boundary.md">
+    <span class="path-category">unsafe 与 soundness</span>
+    <strong>安全接口的边界怎么守？</strong>
+    <span class="path-description">把“不出事”的直觉，变成可以逐条核对的安全不变式。</span>
+    <span class="path-chapter">第 24 章 · unsafe 的边界 <span aria-hidden="true">→</span></span>
+  </a>
+  <a class="reading-path" href="./part6/30-project-arrayvec.md">
+    <span class="path-category">综合实战与审计</span>
+    <strong>怎样写一个安全的容器？</strong>
+    <span class="path-description">把初始化、析构和 panic 安全串起来，亲手验证 ArrayVec。</span>
+    <span class="path-chapter">第 30 章 · ArrayVec <span aria-hidden="true">→</span></span>
+  </a>
+</nav>
+
 ## 这本书写给谁
 
 写给**已经能写、但总被卡住**的人。你大概已经过了“语法看不懂”那一关，

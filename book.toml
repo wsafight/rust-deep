@@ -13,9 +13,12 @@ create-missing = true
 edition = "2024"
 
 [output.html]
-default-theme = "navy"
-preferred-dark-theme = "ayu"
-no-section-label = false
+default-theme = "light"
+preferred-dark-theme = "navy"
+no-section-label = true
+sidebar-header-nav = false
+additional-css = ["theme/custom.css"]
+additional-js = ["theme/custom.js"]
 git-repository-url = "https://github.com/wsafight/rust-deep"
 edit-url-template = "https://github.com/wsafight/rust-deep/edit/main/{path}"
 mathjax-support = false
